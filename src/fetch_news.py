@@ -26,7 +26,7 @@ MAX_LIMIT = 50
 # 技改条目标题关键词
 PATCH_KEYWORDS = ("武学调整", "技改")
 # txt 落盘目录（相对于本文件：workspace/docs/Jx3_Info_Datased）
-DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "docs" / "Jx3_Info_Datased"
+DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "patches"
 
 
 class FetchError(Exception):
