@@ -75,21 +75,29 @@ def filter_patch_records(records: list[dict],
 # ---------------------------------------------------------------- HTML -> 纯文本
 
 class _TextExtractor(HTMLParser):
-    """仅保留文本内容：丢弃所有标签，<br>/<p> 等块级标签转换为换行。"""
+    """仅保留文本内容：丢弃所有标签，<br>/<p> 等块级标签转换为换行；
+    <a> 标签保留为「链接文字 (URL)」的纯文本形式（无 href 时仅保留文字）。"""
 
     BLOCK_TAGS = {"p", "br", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"}
 
     def __init__(self) -> None:
         super().__init__()
         self._parts: list[str] = []
+        self._link_stack: list[str | None] = []  # 嵌套 <a> 的 href 栈
 
     def handle_starttag(self, tag, attrs):
         if tag in self.BLOCK_TAGS:
             self._parts.append("\n")
+        elif tag == "a":
+            self._link_stack.append(dict(attrs).get("href"))
 
     def handle_endtag(self, tag):
         if tag in self.BLOCK_TAGS:
             self._parts.append("\n")
+        elif tag == "a" and self._link_stack:
+            href = self._link_stack.pop()
+            if href:
+                self._parts.append(f" ({href})")
 
     def handle_data(self, data):
         self._parts.append(data)
