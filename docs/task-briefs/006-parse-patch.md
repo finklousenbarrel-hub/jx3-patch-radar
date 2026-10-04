@@ -24,7 +24,8 @@
 
 ## 环境
 jx3-patch-radar 项目
-- src存放代码文件 主力是 src/fetch_news.py
+- src存放代码文件 
+  src/fetch_news.py用于抓取公告并储存为txt格式文件
 - tests为函数测试用
 - docs用来存放开发日志
 - data用来存放技改信息抓取结果

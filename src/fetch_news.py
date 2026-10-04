@@ -1,25 +1,41 @@
 # -*- coding: utf-8 -*-
-"""剑网3技改公告抓取器 v1（简报 005）
+"""剑网3技改公告抓取器 v2（简报 005 抓取 + 简报 006 链接保留 + 简报 007 增量去重）
 
 数据源：https://www.jx3api.com/news/records
 
 对外接口（可被其他模块 import）：
     fetch_records(limit=50, timeout=15)  拉取公告列表
     filter_patch_records(records)        筛出技改（武学调整）条目
-    record_to_text(record)               提取单条公告的纯文本正文（去除 HTML）
+    record_to_text(record)               提取单条公告的纯文本正文（去除 HTML，
+                                         <a> 保留为「链接文字 (URL)」）
     save_patch_txt(record, out_dir)      将技改条目存为 txt，返回文件路径
-    main()                               命令行入口：抓取 -> 筛选 -> 打印 -> 落盘
+    record_uid(record)                   公告唯一标识（url，缺失时回退标题）
+    load_state(path) / save_state(state, path)   读写增量状态文件
+    filter_new_records(records, state)   筛出 state 中尚未处理的新公告
+    main()                               命令行入口：拉列表 -> 比对 state ->
+                                         只处理新增（存 txt + 解析存 json）->
+                                         更新 state -> 打印本次新增 N 条
+
+状态文件 data/state.json 结构（以公告 url 为键）：
+    {
+      "<公告url>": {"url": "<公告url>", "processed_at": "2026-10-04"}
+    }
+增量运行时，已处理公告的 txt/json 不会被改动或重写。
 """
 
 from __future__ import annotations
 
+import json
 import re
 import sys
+from datetime import date as _date
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
 
 import requests
+
+import parse_patch
 
 API_URL = "https://www.jx3api.com/news/records"
 MAX_LIMIT = 50
@@ -27,6 +43,8 @@ MAX_LIMIT = 50
 PATCH_KEYWORDS = ("武学调整", "技改")
 # txt 落盘目录（相对于本文件：workspace/data/patches）
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "patches"
+# 增量状态文件（workspace/data/state.json）
+STATE_FILE = DEFAULT_OUT_DIR.parent / "state.json"
 
 
 class FetchError(Exception):
@@ -34,6 +52,27 @@ class FetchError(Exception):
 
 
 # ---------------------------------------------------------------- 抓取
+
+def _fetch_via_curl(limit: int, timeout: float) -> dict:
+    """requests 的 TLS 握手被数据源拒绝时，回退用 curl 拉取同一接口。"""
+    import subprocess
+
+    try:
+        out = subprocess.run(
+            ["curl", "-sS", "--max-time", str(int(timeout) or 15),
+             f"{API_URL}?limit={limit}"],
+            capture_output=True, timeout=timeout + 5,  # 字节捕获，避免 GBK 控制台编码误伤 UTF-8
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise FetchError(f"curl 回退请求也失败：{exc}") from exc
+    if out.returncode != 0:
+        raise FetchError(f"curl 回退请求失败（退出码 {out.returncode}）："
+                         f"{out.stderr.decode('utf-8', 'replace').strip()}")
+    try:
+        return json.loads(out.stdout.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as exc:
+        raise FetchError("curl 回退返回的不是合法 JSON") from exc
+
 
 def fetch_records(limit: int = MAX_LIMIT, timeout: float = 15) -> list[dict]:
     """从 JX3API 拉取最新公告列表。
@@ -47,15 +86,16 @@ def fetch_records(limit: int = MAX_LIMIT, timeout: float = 15) -> list[dict]:
 
     try:
         resp = requests.get(API_URL, params={"limit": limit}, timeout=timeout)
+        try:
+            data = resp.json()
+        except ValueError as exc:
+            raise FetchError(f"接口返回的不是合法 JSON（HTTP {resp.status_code}）") from exc
     except requests.Timeout as exc:
         raise FetchError(f"接口请求超时（>{timeout}s）：{API_URL}") from exc
-    except requests.RequestException as exc:
-        raise FetchError(f"接口请求失败：{exc}") from exc
-
-    try:
-        data = resp.json()
-    except ValueError as exc:
-        raise FetchError(f"接口返回的不是合法 JSON（HTTP {resp.status_code}）") from exc
+    except requests.RequestException:
+        # TLS 握手被数据源拒绝（SSLEOFError 等）时回退 curl 通道
+        print("[提示] requests 请求失败，回退 curl 通道重试...")
+        data = _fetch_via_curl(limit, timeout)
 
     records = data.get("data")
     if not isinstance(records, list):
@@ -146,10 +186,56 @@ def save_patch_txt(record: dict, out_dir: Path | str = DEFAULT_OUT_DIR) -> Path:
     return path
 
 
+# ---------------------------------------------------------------- 增量状态
+
+def record_uid(record: dict) -> str:
+    """公告唯一标识：优先 url，缺失时回退标题（并打印警告）。"""
+    url = str(record.get("url") or "").strip()
+    if url:
+        return url
+    title = str(record.get("title", "")).strip()
+    print(f"[警告] 公告缺少 url，回退用标题作唯一标识：{title}", file=sys.stderr)
+    return title
+
+
+def load_state(path: Path | str = STATE_FILE) -> dict:
+    """读取状态文件；文件缺失或损坏时返回空状态（视为全部未处理）。"""
+    path = Path(path)
+    if not path.exists():
+        return {}
+    try:
+        state = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError) as exc:
+        print(f"[警告] 状态文件损坏，按空状态处理：{exc}", file=sys.stderr)
+        return {}
+    return state if isinstance(state, dict) else {}
+
+
+def save_state(state: dict, path: Path | str = STATE_FILE) -> Path:
+    """写入状态文件（UTF-8、中文不转义、键排序保证确定性）。"""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2, sort_keys=True),
+                    encoding="utf-8")
+    return path
+
+
+def filter_new_records(records: list[dict], state: dict) -> list[dict]:
+    """筛出 state 中尚未处理的公告（按 record_uid 比对）。"""
+    return [r for r in records if record_uid(r) not in state]
+
+
+def process_record(record: dict, out_dir: Path | str = DEFAULT_OUT_DIR) -> Path:
+    """处理一条新公告：存 txt 并解析为 json，返回 txt 路径。"""
+    txt_path = save_patch_txt(record, out_dir)
+    parse_patch.save_patch_json(txt_path)
+    return txt_path
+
+
 # ---------------------------------------------------------------- 入口
 
 def main(limit: int = MAX_LIMIT) -> int:
-    print(f"[1/3] 正在请求 {API_URL}（limit={limit}）...")
+    print(f"[1/4] 正在请求 {API_URL}（limit={limit}）...")
     try:
         records = fetch_records(limit=limit)
     except (FetchError, ValueError) as exc:
@@ -161,26 +247,23 @@ def main(limit: int = MAX_LIMIT) -> int:
         return 1
 
     patches = filter_patch_records(records)
-    print(f"[2/3] 共 {len(records)} 条公告，筛出 {len(patches)} 条技改条目：")
-    for r in patches:
-        print(f"  {r.get('date')} | {r.get('title')}")
-    if not patches:
-        print("[警告] 未找到任何技改条目。", file=sys.stderr)
-        return 1
+    print(f"[2/4] 共 {len(records)} 条公告，筛出 {len(patches)} 条技改条目。")
 
-    print(f"[3/3] 写入目录：{DEFAULT_OUT_DIR}")
-    for r in patches:
-        path = save_patch_txt(r)
-        print(f"  已保存 -> {path.name}")
+    state = load_state()
+    new_records = filter_new_records(patches, state)
+    print(f"[3/4] 其中已处理 {len(patches) - len(new_records)} 条，本次新增 {len(new_records)} 条。")
 
-    # 验收输出：目标条目 + 技改信息前 500 个字符（纯文本）
-    target = next((r for r in patches if "第二轮武学调整" in str(r.get("title", ""))),
-                  patches[0])
-    print("\n===== 验收输出 =====")
-    print(f"标题：{target.get('title')}")
-    print(f"日期：{target.get('date')}")
-    print("正文前 500 字符：")
-    print(record_to_text(target)[:500])
+    if new_records:
+        today = _date.today().isoformat()
+        for r in new_records:
+            txt_path = process_record(r)
+            state[record_uid(r)] = {"url": record_uid(r), "processed_at": today}
+            print(f"  已处理 -> {txt_path.name}（txt + json）")
+        save_state(state)
+        print(f"[4/4] 状态文件已更新：{STATE_FILE}")
+    else:
+        print("[4/4] 无新增条目，已有 txt/json 与状态文件保持原样。")
+
     return 0
 
 
