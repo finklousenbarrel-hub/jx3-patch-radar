@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="430" viewBox="0 0 840 430" font-family="Consolas, Menlo, 'Courier New', monospace">
+  <!-- 终端窗口 -->
+  <rect x="1" y="1" width="838" height="428" rx="10" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <!-- 标题栏 -->
+  <rect x="1" y="1" width="838" height="40" rx="10" fill="#161b22"/>
+  <rect x="1" y="21" width="838" height="20" fill="#161b22"/>
+  <circle cx="28" cy="21" r="6" fill="#ff5f57"/>
+  <circle cx="50" cy="21" r="6" fill="#febc2e"/>
+  <circle cx="72" cy="21" r="6" fill="#28c840"/>
+  <text x="420" y="25" text-anchor="middle" font-size="13" fill="#8b949e">Terminal — jx3-patch-radar</text>
+
+  <g font-size="14">
+    <!-- 命令 1 -->
+    <text x="24" y="70"><tspan fill="#3fb950">$ </tspan><tspan fill="#c9d1d9">python src/fetch_news.py</tspan></text>
+    <text x="24" y="96" fill="#8b949e">[1/4] 正在请求 https://www.jx3api.com/news/records（limit=50）...</text>
+    <text x="24" y="122" fill="#8b949e">[2/4] 共 50 条公告，筛出 2 条技改条目。</text>
+    <text x="24" y="148"><tspan fill="#8b949e">[3/4] 其中已处理 0 条，</tspan><tspan fill="#3fb950">本次新增 2 条</tspan><tspan fill="#8b949e">。</tspan></text>
+    <text x="24" y="174" fill="#8b949e">  已处理 -&gt; 9月24日“苍生铸世”资料片第二轮武学调整.txt（txt + json）</text>
+    <text x="24" y="200" fill="#8b949e">  已处理 -&gt; 9月8日“苍生铸世”资料片首轮武学调整.txt（txt + json）</text>
+    <text x="24" y="226"><tspan fill="#8b949e">[4/4] 状态文件已更新：</tspan><tspan fill="#58a6ff">data/state.json</tspan></text>
+
+    <!-- 命令 2 -->
+    <text x="24" y="262"><tspan fill="#3fb950">$ </tspan><tspan fill="#c9d1d9">python src/make_report.py</tspan></text>
+    <text x="24" y="288"><tspan fill="#8b949e">已生成 -&gt; </tspan><tspan fill="#58a6ff">reports/9月24日“苍生铸世”资料片第二轮武学调整.md</tspan></text>
+    <text x="24" y="314" fill="#d29922">    门派 21 ｜ 心法 65 ｜ 条目 352</text>
+    <text x="24" y="340"><tspan fill="#8b949e">已生成 -&gt; </tspan><tspan fill="#58a6ff">reports/9月8日“苍生铸世”资料片首轮武学调整.md</tspan></text>
+
+    <!-- 光标 -->
+    <text x="24" y="382"><tspan fill="#3fb950">$ </tspan><tspan fill="#c9d1d9">▊</tspan></text>
+  </g>
+</svg>
