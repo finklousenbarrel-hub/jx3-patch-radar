@@ -1,0 +1,9 @@
+---
+description: 工程铁律
+alwaysApply: true
+---
+
+- 数据文件写入 data/，文档写入 docs/，报告写入 reports/，不得混放
+- 修改 src/ 任何文件后必须运行 python -m pytest tests/ -q 并确认全绿
+- fetch_news.py 管道必须保持幂等：重复运行不得改动已处理公告的文件
+- 交付任何文档前，全文搜索占位词（TODO/待补/附xx/示例），发现即补全
