@@ -16,9 +16,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from parse_patch import parse_patch_file, parse_patch_text  # noqa: E402
+from parse_patch import (  # noqa: E402
+    parse_patch_file,
+    parse_patch_text,
+    parse_plus_md_file,
+    parse_plus_md_text,
+)
 
 PATCH_0924 = ROOT / "data" / "patches" / "9月24日“苍生铸世”资料片第二轮武学调整.txt"
+PLUS_0908_WANHUA = (ROOT / "data" / "extra-info" / "plus"
+                    / "9月8日“苍生铸世”资料片首轮武学调整-万花.md")
 
 
 def _counts(data: dict) -> tuple[int, int, int]:
@@ -146,6 +153,96 @@ def test_json_chinese_unescaped():
     assert "万花" in raw
     assert "\\u4e07" not in raw
     json.loads(raw)  # 合法 JSON
+
+
+# ---------------------------------------------------------------- plus md（简报 011）
+
+def _texts_all(v):
+    if isinstance(v, str):
+        yield v
+    elif isinstance(v, dict):
+        for x in v.values():
+            yield from _texts_all(x)
+    elif isinstance(v, list):
+        for x in v:
+            yield from _texts_all(x)
+
+
+def test_plus_basic_structure():
+    """plus md：H1 作标题；◎ 带空格兼容；心法带 qixue_table 字段。"""
+    md = ("# 测试-万花\n\n◎ 万花\n\n#花间游#\n\n调整思路：测试。\n\n·条目甲\n\n"
+          "奇穴表格\n\n| 奇穴重数 | 奇穴类型 | 奇穴名称 | 调整后效果 |\n"
+          "| --- | --- | --- | --- |\n"
+          "| 第一重 | 被动招式 | 踏莲 | 效果甲 |\n"
+          "| 第四重 | 被动招式 | 沁逸 | **效果乙** |\n")
+    data = parse_plus_md_text(md)
+    assert data["title"] == "测试-万花"
+    assert data["sects"][0]["name"] == "万花"
+    xinfa = data["sects"][0]["xinfas"][0]
+    assert xinfa["name"] == "花间游"
+    assert xinfa["notes"] == "调整思路：测试。"
+    assert xinfa["entries"] == ["条目甲"]
+    assert xinfa["qixue_table"] == [
+        {"重数": "第一重", "类型": "被动招式", "名称": "踏莲",
+         "效果": "效果甲", "is_changed": False},
+        {"重数": "第四重", "类型": "被动招式", "名称": "沁逸",
+         "效果": "效果乙", "is_changed": True},  # ** 剥掉，仅存 is_changed
+    ]
+
+
+def test_plus_table_cell_unescape():
+    """表格单元格：\\| 还原为 |，<br> 转换行。"""
+    md = ("# t\n\n◎甲\n\n#乙#\n\n"
+          "| 重数 | 名称 | 类型 | 效果 |\n| --- | --- | --- | --- |\n"
+          "| 一 | 丙 | 丁 | 效果a<br>效果b\\|c |\n")
+    row = parse_plus_md_text(md)["sects"][0]["xinfas"][0]["qixue_table"][0]
+    assert row["效果"] == "效果a\n效果b|c"
+
+
+def test_plus_wanhua_qixue_rows():
+    """验收：万花篇花间游 qixue_table 行数 = 表格实际行数（36）。"""
+    data = parse_plus_md_file(PLUS_0908_WANHUA)
+    xinfa = next(x for s in data["sects"] for x in s["xinfas"]
+                 if x["name"] == "花间游")
+    md = PLUS_0908_WANHUA.read_text(encoding="utf-8")
+    # 原文第一张表的数据行数（去表头与分隔行）
+    blocks, cur = [], []
+    for line in md.splitlines():
+        if line.strip().startswith("|"):
+            cur.append(line)
+        elif cur:
+            blocks.append(cur)
+            cur = []
+    if cur:
+        blocks.append(cur)
+    import re as _re
+    n_rows = len([l for l in blocks[0][1:]
+                  if not _re.match(r"^\|[\s:|-]+\|$", l)])
+    assert len(xinfa["qixue_table"]) == n_rows == 36
+
+
+def test_plus_is_changed_flags():
+    """验收：沁逸 is_changed = true；南风吐月 is_changed = false。"""
+    data = parse_plus_md_file(PLUS_0908_WANHUA)
+    rows = {r["名称"]: r for s in data["sects"] for x in s["xinfas"]
+            for r in x["qixue_table"]}
+    assert rows["沁逸"]["is_changed"] is True
+    assert "**" not in rows["沁逸"]["效果"]
+    assert rows["南风吐月"]["is_changed"] is False
+
+
+def test_plus_retention_rate():
+    """验收（反向条款）：万花/少林两篇 JSON 文本保留率 ≥ 95%（对源 md）。"""
+    import re as _re
+
+    strip = lambda s: _re.sub(r"[\s|*#◎\-]+", "", s)
+    for name in ("万花", "少林"):
+        md_path = PLUS_0908_WANHUA.with_name(
+            f"9月8日“苍生铸世”资料片首轮武学调整-{name}.md")
+        data = parse_plus_md_file(md_path)
+        json_chars = sum(len(strip(t)) for t in _texts_all(data))
+        md_chars = len(strip(md_path.read_text(encoding="utf-8")))
+        assert json_chars >= md_chars * 0.95, f"{name}: {json_chars}/{md_chars}"
 
 
 def _run_all() -> int:

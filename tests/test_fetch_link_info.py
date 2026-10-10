@@ -20,9 +20,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
 from fetch_link_info import (  # noqa: E402
+    article_to_markdown,
     article_to_text,
     extract_links,
     parse_article_url,
+    save_article_md,
     save_article_txt,
 )
 
@@ -90,6 +92,103 @@ def test_save_article_txt(tmp_path=None):
 
 def test_article_to_text_strips_html():
     assert article_to_text({"content": "<p>甲</p><p>乙</p>"}) == "甲\n\n乙"
+
+
+# ---------------------------------------------------------------- Markdown plus（简报 010）
+
+def test_md_table_basic():
+    """表格转 Markdown 管道表格：首行为表头，含分隔行。"""
+    html = ('<table><tbody>'
+            '<tr><td>奇穴重数</td><td>奇穴名称</td></tr>'
+            '<tr><td>第一重</td><td>踏莲</td></tr>'
+            '</tbody></table>')
+    md = article_to_markdown({"content": html})
+    assert "| 奇穴重数 | 奇穴名称 |" in md
+    assert "| --- | --- |" in md
+    assert "| 第一重 | 踏莲 |" in md
+
+
+def test_md_table_rowspan_expanded():
+    """rowspan 合并单元格在后续行重复展开，保持语义归属。"""
+    html = ('<table><tbody>'
+            '<tr><td>重数</td><td>名称</td></tr>'
+            '<tr><td rowspan="2">第一重</td><td>甲</td></tr>'
+            '<tr><td>乙</td></tr>'
+            '</tbody></table>')
+    md = article_to_markdown({"content": html})
+    assert "| 第一重 | 甲 |" in md
+    assert "| 第一重 | 乙 |" in md
+
+
+def test_md_table_cell_pipe_and_br():
+    """单元格内 | 转义、<br> 保留为 <br>（不换行破坏表形）。"""
+    html = ('<table><tbody><tr><td>甲</td></tr>'
+            '<tr><td>效果a<br/>效果b|c</td></tr></tbody></table>')
+    md = article_to_markdown({"content": html})
+    assert "效果a<br>效果b\\|c" in md
+
+
+def test_md_red_bold():
+    """标红（rgb/#ff0000/red 三种写法）转 **加粗**，普通文本不加粗。"""
+    for style in ("color: rgb(255, 0, 0);", "color:#ff0000", "color: red;"):
+        html = f'<p>原文<span style="{style}">改动内容</span>尾巴</p>'
+        md = article_to_markdown({"content": html})
+        assert "**改动内容**" in md, style
+        assert "**原文" not in md
+    # 蓝色不算标红
+    md = article_to_markdown({"content": '<p><span style="color: rgb(0, 0, 255);">蓝字</span></p>'})
+    assert "**蓝字**" not in md
+
+
+def test_md_red_bold_not_broken_by_newline():
+    """红色数据段以内换行开头时，** 不跨行断裂（每行 ** 成对）。"""
+    html = ('<p><span style="color: rgb(255, 0, 0);">\n调息时间25秒。</span></p>')
+    md = article_to_markdown({"content": html})
+    for line in md.splitlines():
+        assert line.count("**") % 2 == 0, line
+    assert "**调息时间25秒。**" in md
+
+
+def test_md_red_bold_in_table_cell():
+    """表格单元格内的标红同样加粗，且不泄漏到下一格。"""
+    html = ('<table><tbody><tr><td>甲</td><td>乙</td></tr>'
+            '<tr><td><span style="color: rgb(255, 0, 0);">新增</span></td><td>普通</td></tr>'
+            '</tbody></table>')
+    md = article_to_markdown({"content": html})
+    assert "| **新增** | 普通 |" in md
+
+
+def test_md_link_markdown_form():
+    """<a> 转 [文字](URL)。"""
+    html = '<p><a href="https://a.com/1">详情</a></p>'
+    assert "[详情](https://a.com/1)" in article_to_markdown({"content": html})
+
+
+def test_save_article_md():
+    """plus 版落盘：.md 后缀、一级标题 + Markdown 正文。"""
+    out_dir = Path(tempfile.mkdtemp())
+    article = {"title": "9月8日“苍生铸世”资料片首轮武学调整-万花",
+               "content": '<table><tbody><tr><td>甲</td></tr></tbody></table>'}
+    path = save_article_md(article, out_dir)
+    assert path.suffix == ".md" and "万花" in path.name
+    text = path.read_text(encoding="utf-8")
+    assert text.startswith("# 9月8日“苍生铸世”资料片首轮武学调整-万花\n")
+    assert "| 甲 |" in text
+
+
+def test_plus_files_on_disk():
+    """验收：data/extra-info/plus 下 21 篇 md，表格与加粗成对存在。"""
+    plus_dir = ROOT / "data" / "extra-info" / "plus"
+    files = sorted(plus_dir.glob("*.md"))
+    assert len(files) == 21, len(files)
+    n_tbl = n_bold = 0
+    for f in files:
+        md = f.read_text(encoding="utf-8")
+        n_tbl += md.count("| ---")
+        n_bold += md.count("**") // 2
+        for line in md.splitlines():
+            assert line.count("**") % 2 == 0, (f.name, line[:60])
+    assert n_tbl > 0 and n_bold > 0
 
 
 def _run_all() -> int:

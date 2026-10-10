@@ -17,7 +17,13 @@
     fetch_article(catid, article_id, timeout)  调接口取文章（dict）
     article_to_text(article)       content HTML -> 纯文本
     save_article_txt(article, out_dir)         存为 txt，返回路径
-    main()                         命令行入口：扫 json -> 抓文章 -> 落盘
+    article_to_markdown(article)   content HTML -> Markdown（简报 010：
+                                   表格转 Markdown 表格，标红文本转加粗）
+    save_article_md(article, out_dir)          存为 .md（data/extra-info/plus）
+    main()                         命令行入口：扫 json -> 抓文章 -> txt + plus md 落盘
+
+标红判定：元素 style 中 color 为 rgb(255, 0, 0) / #ff0000 / red（官网用红色标注改动内容）。
+表格 rowspan/colspan 合并单元格在 Markdown 中展开为重复内容（保持语义归属）。
 """
 
 from __future__ import annotations
@@ -26,6 +32,8 @@ import json
 import re
 import sys
 import time
+from html import unescape
+from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -36,6 +44,8 @@ from fetch_news import html_to_text
 # json 输入目录 / txt 输出目录（相对于本文件：workspace/...）
 DEFAULT_JSON_DIR = Path(__file__).resolve().parent.parent / "data" / "patches"
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "extra-info"
+# Markdown plus 版输出目录（表格 + 标红加粗）
+DEFAULT_PLUS_DIR = DEFAULT_OUT_DIR / "plus"
 
 ARTICLE_API = "https://jx3.xoyo.com/api.php"
 # 抓取间隔（秒），避免对官网造成压力
@@ -156,6 +166,193 @@ def save_article_txt(article: dict, out_dir: Path | str = DEFAULT_OUT_DIR) -> Pa
     return path
 
 
+# ---------------------------------------------------------------- Markdown plus（简报 010）
+
+# 标红判定：style 中 color 为 rgb(255, 0, 0) / #f00 / #ff0000 / red
+_RED_RE = re.compile(
+    r"color\s*:\s*(?:rgb\(\s*255\s*,\s*0\s*,\s*0\s*\)|#f00\b|#ff0000\b|red\b)",
+    re.IGNORECASE)
+_BLOCK_TAGS = {"p", "br", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"}
+
+
+def _is_red(attrs: dict) -> bool:
+    return bool(_RED_RE.search(attrs.get("style", "")))
+
+
+class _MarkdownExtractor(HTMLParser):
+    """HTML -> Markdown：
+    - <table> 转 Markdown 管道表格（rowspan/colspan 展开为重复内容，| 转义，换行转 <br>）
+    - 标红文本（元素 style 里红色）转 **加粗**
+    - <a> 转 [文字](URL)（无 href 仅留文字）
+    - 块级标签转换为段落空行
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []          # 正文输出
+        self._style_stack: list[bool] = []   # 每层元素是否标红（endtag 配对弹出）
+        self._bold_open = False              # 当前 ** 是否打开
+        self._link_stack: list[str | None] = []
+        # 表格状态
+        self._in_table = False
+        self._grid: dict[tuple[int, int], str] = {}
+        self._row_idx = -1
+        self._in_cell = False
+        self._cell_buf: list[str] = []
+        self._cell_span = (1, 1)
+        self._n_cols = 0
+
+    # ------------------------------------------------------------ 基础输出
+
+    def _emit(self, s: str) -> None:
+        if not s:
+            return
+        (self._cell_buf if self._in_cell else self._parts).append(s)
+
+    def _set_bold(self, on: bool) -> None:
+        if on != self._bold_open:
+            self._emit("**")
+            self._bold_open = on
+
+    def _is_red_now(self) -> bool:
+        return any(self._style_stack)
+
+    # ------------------------------------------------------------ 标签处理
+
+    def handle_starttag(self, tag, attrs):
+        attrs = dict(attrs)
+        if tag == "table":
+            self._set_bold(False)
+            self._style_stack.append(False)
+            self._in_table = True
+            self._grid, self._row_idx, self._n_cols = {}, -1, 0
+            return
+        self._style_stack.append(_is_red(attrs))
+        if self._in_table:
+            if tag == "tr":
+                self._row_idx += 1
+            elif tag in ("td", "th"):
+                self._in_cell = True
+                self._cell_buf = []
+                rs = int(attrs.get("rowspan") or 1)
+                cs = int(attrs.get("colspan") or 1)
+                self._cell_span = (max(rs, 1), max(cs, 1))
+            elif tag == "br":
+                self._set_bold(False)  # 单元格内换行前收尾加粗
+                self._emit("\n")
+            return
+        if tag in _BLOCK_TAGS:
+            self._set_bold(False)
+            self._parts.append("\n")
+        elif tag == "a":
+            href = attrs.get("href")
+            self._link_stack.append(href)
+            if href:
+                self._set_bold(False)
+                self._emit("[")
+
+    def handle_endtag(self, tag):
+        if tag == "table":
+            if self._style_stack:
+                self._style_stack.pop()
+            self._in_table = False
+            self._parts.append("\n" + self._render_table() + "\n\n")
+            return
+        if self._in_table:
+            if tag in ("td", "th") and self._in_cell:
+                self._finish_cell()
+            if self._style_stack:
+                self._style_stack.pop()
+            return
+        if tag in _BLOCK_TAGS:
+            self._set_bold(False)
+            self._parts.append("\n")
+        elif tag == "a" and self._link_stack:
+            href = self._link_stack.pop()
+            if href:
+                self._set_bold(False)
+                self._emit(f"]({href})")
+        if self._style_stack:
+            self._style_stack.pop()
+
+    def handle_startendtag(self, tag, attrs):
+        # 自闭合标签（如 <br/>）不进栈；换行前先收尾加粗（下个数据段会自动重开）
+        self._set_bold(False)
+        if tag == "br":
+            self._emit("\n")
+        elif tag in _BLOCK_TAGS:
+            self._parts.append("\n")
+
+    # ------------------------------------------------------------ 表格
+
+    def _finish_cell(self) -> None:
+        self._set_bold(False)  # 收尾当前单元格内未闭合的加粗，避免泄漏到下一格
+        text = "".join(self._cell_buf)
+        text = re.sub(r"\s*\n\s*", "<br>", text).strip()
+        text = text.replace("|", "\\|")
+        rs, cs = self._cell_span
+        col = 0
+        while (self._row_idx, col) in self._grid:  # 跳过上方 rowspan 占用的列
+            col += 1
+        for dr in range(rs):
+            for dc in range(cs):
+                self._grid[(self._row_idx + dr, col + dc)] = text
+        self._n_cols = max(self._n_cols, col + cs)
+        self._in_cell = False
+        self._cell_buf = []
+
+    def _render_table(self) -> str:
+        if self._row_idx < 0 or self._n_cols == 0:
+            return ""
+        rows = [[self._grid.get((r, c), "") for c in range(self._n_cols)]
+                for r in range(self._row_idx + 1)]
+        out = ["| " + " | ".join(rows[0]) + " |",
+               "| " + " | ".join("---" for _ in rows[0]) + " |"]
+        out += ["| " + " | ".join(row) + " |" for row in rows[1:]]
+        return "\n".join(out)
+
+    # ------------------------------------------------------------ 数据
+
+    def handle_data(self, data):
+        if self._in_table and not self._in_cell:
+            return  # 表格骨架里的空白文本
+        red = self._is_red_now()
+        # 数据段内的换行先收尾加粗再输出，避免 ** 跨行断裂；纯空白段不切换加粗
+        for seg in re.split(r"(\n+)", data):
+            if not seg:
+                continue
+            if seg.startswith("\n"):
+                self._set_bold(False)
+                self._emit(seg)
+            else:
+                self._set_bold(red and bool(seg.strip()))
+                self._emit(seg)
+
+    def get_markdown(self) -> str:
+        self._set_bold(False)
+        text = unescape("".join(self._parts))
+        lines = [re.sub(r"[ \t　]+", " ", line).strip() for line in text.splitlines()]
+        return re.sub(r"\n{3,}", "\n\n", "\n".join(lines)).strip()
+
+
+def article_to_markdown(article: dict) -> str:
+    """文章 content HTML 转 Markdown：表格保留表形，标红转加粗。"""
+    parser = _MarkdownExtractor()
+    parser.feed(str(article.get("content", "")))
+    parser.close()
+    return parser.get_markdown()
+
+
+def save_article_md(article: dict, out_dir: Path | str = DEFAULT_PLUS_DIR) -> Path:
+    """文章存为 Markdown：文件名为文章标题，内容为一级标题 + Markdown 正文。"""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    title = str(article.get("title", "")).strip()
+    path = out_dir / f"{_safe_filename(title)}.md"
+    path.write_text(f"# {title}\n\n{article_to_markdown(article)}\n", encoding="utf-8")
+    return path
+
+
 # ---------------------------------------------------------------- 入口
 
 def main(json_dir: Path = DEFAULT_JSON_DIR,
@@ -173,7 +370,7 @@ def main(json_dir: Path = DEFAULT_JSON_DIR,
         print("[警告] 未发现任何链接。", file=sys.stderr)
         return 1
 
-    print(f"[2/2] 开始抓取，输出目录：{out_dir}")
+    print(f"[2/2] 开始抓取，输出目录：{out_dir}（plus 版 -> {DEFAULT_PLUS_DIR}）")
     ok = 0
     for i, link in enumerate(links):
         if i:
@@ -181,8 +378,9 @@ def main(json_dir: Path = DEFAULT_JSON_DIR,
         try:
             article = fetch_article(link["catid"], link["id"])
             path = save_article_txt(article, out_dir)
+            md_path = save_article_md(article)
             ok += 1
-            print(f"  [{ok}/{len(links)}] {link['sect']} -> {path.name}")
+            print(f"  [{ok}/{len(links)}] {link['sect']} -> {path.name}（+plus/{md_path.name}）")
         except (LinkFetchError, ValueError) as exc:
             print(f"  [失败] {link['sect']} {link['url']}：{exc}", file=sys.stderr)
 

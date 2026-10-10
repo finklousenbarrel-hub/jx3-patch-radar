@@ -7,7 +7,11 @@
     parse_patch_text(text, title="", date="")  解析正文文本，返回结构化 dict
     parse_patch_file(path)                     解析单个 txt 文件（标题/日期取自文件名）
     save_patch_json(path, out_dir=None)        解析并落盘为 .json，返回文件路径
+    parse_plus_md_text(text, title="", date="")   解析 extra-info/plus 的 Markdown
+                                                  （简报 011：额外提取奇穴表格）
+    parse_plus_md_file(path) / save_plus_json(path)
     main()                                     命令行入口：批量解析 data/patches/*.txt
+                                               与 data/extra-info/plus/*.md
 
 输出结构：
     {
@@ -193,7 +197,163 @@ def save_patch_json(path: str | Path, out_dir: str | Path | None = None) -> Path
     return out_path
 
 
-def main(patch_dir: Path = DEFAULT_DIR) -> int:
+# ---------------------------------------------------------------- plus md（简报 011）
+
+# plus Markdown 目录（fetch_link_info 的产物）
+PLUS_MD_DIR = Path(__file__).resolve().parent.parent / "data" / "extra-info" / "plus"
+
+_MD_H1_RE = re.compile(r"^#\s+(?P<title>.+?)\s*$")   # Markdown 一级标题（文件名行）
+_TABLE_ROW_RE = re.compile(r"^\|")
+_TABLE_CELL_SPLIT = re.compile(r"(?<!\\)\|")          # 按未转义的 | 切分
+_TABLE_SEP_CELL = re.compile(r"^:?-{3,}:?$")          # 分隔行单元格 | --- |
+
+# qixue_table 目标列与表头关键词的映射（效果列取未被认领的最后一列兜底）
+_QIXUE_COLS = (("重数", ("重数",)), ("类型", ("类型",)), ("名称", ("名称",)))
+
+
+def _split_table_row(line: str) -> list[str]:
+    """表格行切分为单元格：去首尾 |，按未转义 | 切分，还原 \\| 与 <br>。"""
+    s = line.strip()
+    if s.startswith("|"):
+        s = s[1:]
+    if s.endswith("|"):
+        s = s[:-1]
+    cells = []
+    for c in _TABLE_CELL_SPLIT.split(s):
+        c = c.strip().replace("\\|", "|")
+        c = re.sub(r"\s*<br>\s*", "\n", c)
+        cells.append(c)
+    return cells
+
+
+def _is_sep_row(line: str) -> bool:
+    return all(_TABLE_SEP_CELL.match(c) for c in _split_table_row(line) if c != "")
+
+
+def _strip_bold(s: str) -> str:
+    return s.replace("**", "")
+
+
+def _parse_qixue_table(rows: list[str]) -> list[dict]:
+    """表格行列表 -> qixue_table 结构化数组。
+
+    首行为表头（按「重数/类型/名称」关键词定位列，剩余最后一列作效果）；
+    分隔行跳过；** 仅用于判断 is_changed，入库前剥掉。
+    """
+    if not rows:
+        return []
+    header = _split_table_row(rows[0])
+    col_idx: dict[str, int] = {}
+    for key, kws in _QIXUE_COLS:
+        for i, h in enumerate(header):
+            if i not in col_idx.values() and any(k in h for k in kws):
+                col_idx[key] = i
+                break
+    used = set(col_idx.values())
+    # 效果列：优先含「效果」表头，否则取未认领的最后一列
+    effect_idx = next((i for i, h in enumerate(header)
+                       if i not in used and "效果" in h), None)
+    if effect_idx is None:
+        effect_idx = next((i for i in range(len(header) - 1, -1, -1)
+                           if i not in used), None)
+    col_idx["效果"] = effect_idx
+
+    out = []
+    for line in rows[1:]:
+        if _is_sep_row(line):
+            continue
+        cells = _split_table_row(line)
+        is_changed = "**" in line
+        cells = [_strip_bold(c) for c in cells]
+        get = lambda k: cells[col_idx[k]] if col_idx.get(k) is not None \
+            and col_idx[k] < len(cells) else ""
+        out.append({"重数": get("重数"), "类型": get("类型"), "名称": get("名称"),
+                    "效果": get("效果"), "is_changed": is_changed})
+    return out
+
+
+def parse_plus_md_text(text: str, title: str = "", date: str = "") -> dict:
+    """解析 extra-info/plus 的 Markdown 为结构化 JSON。
+
+    与 parse_patch_text 同构（sects/xinfas/entries/notes，保真原则不变），
+    每个心法额外增加 qixue_table 字段：奇穴表格结构化数组，
+    每行含 重数/类型/名称/效果/is_changed。
+    """
+    lines = text.splitlines()
+
+    # 首个 Markdown 一级标题作 title（注意与 #心法# 区分：H1 行尾无 #）
+    body_start = 0
+    for i, line in enumerate(lines):
+        if not line.strip():
+            continue
+        m = _MD_H1_RE.match(line.strip())
+        if m and not _XINFA_RE.match(line.strip()):
+            title = title or m.group("title")
+            body_start = i + 1
+        break
+
+    # 剥离表格行（按出现时的 门派/心法 序位暂存），其余行走主公告解析
+    body_lines: list[str] = []
+    tables: dict[tuple[int, int], list[str]] = {}
+    sect_ord = -1
+    xinfa_ord = -1
+    cur_table: list[str] | None = None
+    for line in lines[body_start:]:
+        if _TABLE_ROW_RE.match(line.strip()):
+            if cur_table is None:
+                # 表格标题行（「奇穴表格」）是表格的图注，不并入上一条目
+                while body_lines and not body_lines[-1].strip():
+                    body_lines.pop()
+                if body_lines and body_lines[-1].strip() == "奇穴表格":
+                    body_lines.pop()
+                cur_table = tables.setdefault((sect_ord, xinfa_ord), [])
+            cur_table.append(line.strip())
+            continue
+        cur_table = None
+        stripped = line.strip()
+        if _SECT_RE.match(stripped):
+            sect_ord += 1
+            xinfa_ord = -1
+        elif _XINFA_RE.match(stripped):
+            xinfa_ord += 1
+        body_lines.append(line)
+
+    data = parse_patch_text("\n".join(body_lines), title=title, date=date)
+
+    # 表挂回心法：若某门派首心法为空名（隐式心法），命名心法序位右移一位
+    for (s_ord, x_ord), rows in tables.items():
+        if s_ord < 0 or s_ord >= len(data["sects"]):
+            continue
+        xinfas = data["sects"][s_ord]["xinfas"]
+        shift = 1 if xinfas and xinfas[0]["name"] == "" and x_ord >= 0 else 0
+        idx = 0 if x_ord < 0 else x_ord + shift
+        if 0 <= idx < len(xinfas):
+            xinfas[idx].setdefault("qixue_table", []).extend(_parse_qixue_table(rows))
+
+    for sect in data["sects"]:
+        for xinfa in sect["xinfas"]:
+            xinfa.setdefault("qixue_table", [])
+    return data
+
+
+def parse_plus_md_file(path: str | Path) -> dict:
+    """解析单个 plus Markdown 文件；标题取 md 一级标题，日期从文件名推断。"""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    return parse_plus_md_text(text, date=_date_from_filename(path.stem, text))
+
+
+def save_plus_json(path: str | Path) -> Path:
+    """解析 plus Markdown 并在同目录落盘同名 .json（UTF-8，中文不转义）。"""
+    path = Path(path)
+    data = parse_plus_md_file(path)
+    out_path = path.with_suffix(".json")
+    out_path.write_text(json.dumps(data, ensure_ascii=False, indent=2),
+                        encoding="utf-8")
+    return out_path
+
+
+def main(patch_dir: Path = DEFAULT_DIR, plus_dir: Path = PLUS_MD_DIR) -> int:
     txts = sorted(patch_dir.glob("*.txt"))
     if not txts:
         print(f"[警告] {patch_dir} 下没有 txt 文件。", file=sys.stderr)
@@ -205,6 +365,16 @@ def main(patch_dir: Path = DEFAULT_DIR) -> int:
         n_xinfa = sum(len(s["xinfas"]) for s in data["sects"])
         n_entry = sum(len(x["entries"]) for s in data["sects"] for x in s["xinfas"])
         print(f"已解析 -> {out.name}（门派 {n_sect} / 心法 {n_xinfa} / 条目 {n_entry}）")
+
+    mds = sorted(plus_dir.glob("*.md")) if plus_dir.exists() else []
+    for md in mds:
+        out = save_plus_json(md)
+        data = json.loads(out.read_text(encoding="utf-8"))
+        n_rows = sum(len(x["qixue_table"]) for s in data["sects"]
+                     for x in s["xinfas"])
+        print(f"已解析 -> {out.name}（奇穴表行数 {n_rows}）")
+    if mds:
+        print(f"plus 目录共解析 {len(mds)} 篇。")
     return 0
 
 

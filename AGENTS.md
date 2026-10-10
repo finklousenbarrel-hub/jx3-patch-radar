@@ -15,12 +15,14 @@ jx3-patch-radar/
 ├── src/
 │   ├── fetch_news.py    # 抓取：拉列表 → 比对 state → 只处理新增（存 txt + 解析 json）→ 更新 state
 │   ├── parse_patch.py   # 解析：txt → 结构化 JSON（门派/心法/条目，含 notes、is_shared）
+│   │                    #   也解析 extra-info/plus/*.md → 同目录 .json（含 qixue_table）
 │   ├── make_report.py   # 简报：json → Markdown（标题头 → 改动变化榜 → 分门派详情）
-│   └── fetch_link_info.py # 子文章：json notes 链接 → 官网 api.php → 全文 txt
-├── tests/               # pytest：4 个测试文件（共 37 项）
+│   └── fetch_link_info.py # 子文章：json notes 链接 → 官网 api.php → 全文 txt + plus Markdown
+├── tests/               # pytest：4 个测试文件（共 51 项）
 ├── data/
 │   ├── patches/         # *.txt（清洗后正文）+ *.json（结构化解析结果）
 │   ├── extra-info/      # 门派子文章全文 txt（文件名=文章标题）
+│   │   └── plus/        # 子文章 Markdown（表格还原+标红加粗）+ 解析后的 .json（qixue_table）
 │   └── state.json       # 增量状态：{公告url: {url, processed_at}}
 ├── reports/             # 生成的 Markdown 简报（派生物）
 ├── docs/
