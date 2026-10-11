@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""make_report 的验收测试（简报 008）
+"""make_report 的验收测试（简报 008 / 012）
 
 运行方式（项目根目录）：
     python tests/test_make_report.py
@@ -18,14 +18,28 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from make_report import generate_report, generate_report_file  # noqa: E402
+from make_report import (generate_overview, generate_overview_file,  # noqa: E402
+                         generate_report, generate_report_file)
 
 JSON_0924 = ROOT / "data" / "patches" / "9月24日“苍生铸世”资料片第二轮武学调整.json"
 JSON_0908 = ROOT / "data" / "patches" / "9月8日“苍生铸世”资料片首轮武学调整.json"
+PLUS_DIR = ROOT / "data" / "extra-info" / "plus"
+OVERVIEW_BASE = "9月8日“苍生铸世”资料片首轮武学调整"
 
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
+
+
+def _load_plus() -> list[dict]:
+    return [_load(p) for p in sorted(PLUS_DIR.glob("*.json"))]
+
+
+def _plus_totals(datas: list[dict]) -> tuple[int, int]:
+    """plus json 的奇穴总数 / 改动奇穴数（is_changed=true）。"""
+    rows = [r for d in datas for s in d["sects"]
+            for x in s["xinfas"] for r in x.get("qixue_table", [])]
+    return len(rows), sum(1 for r in rows if r.get("is_changed"))
 
 
 def test_ranking_sum_matches_counts():
@@ -93,6 +107,54 @@ def test_deterministic_regeneration():
     first = p1.read_bytes()
     p2 = generate_report_file(JSON_0924, out_dir)
     assert p1 == p2 and p2.read_bytes() == first
+
+
+# ---------------------------------------------------------------- 首轮技改总览（简报 012）
+
+
+def _overview_board(md: str) -> list[str]:
+    return md.split("## 首轮改动奇穴排行榜")[1].splitlines()
+
+
+def test_overview_ranking_sum_matches_counts():
+    """验收：总览排行榜改动数/奇穴总数合计与 plus JSON 三数一致。"""
+    datas = _load_plus()
+    assert len(datas) == 21  # 21 篇子文章全上榜
+    n_rows, n_changed = _plus_totals(datas)
+    pairs = [(int(m.group(1)), int(m.group(2))) for line in _overview_board(generate_overview(datas))
+             if (m := re.match(r"\|\s*\d+\s*\|[^|]+\|\s*(\d+)\s*\|\s*(\d+)\s*\|", line))]
+    assert len(pairs) == 21
+    assert sum(c for c, _ in pairs) == n_changed
+    assert sum(r for _, r in pairs) == n_rows
+
+
+def test_overview_header_counts():
+    """总览标题头：公告名-总览 / 日期 / 三数（门派 21 / 奇穴 1152 / 改动 346）。"""
+    md = generate_overview(_load_plus())
+    assert md.startswith(f"# {OVERVIEW_BASE}-总览\n")
+    assert "日期：2026/09/08" in md
+    assert "门派数：21 ｜ 奇穴总数：1152 ｜ 改动奇穴数：346" in md
+
+
+def test_overview_ranking_order():
+    """排行榜按改动数降序、相同按门派名排序；霸刀锚点 15/36。"""
+    rows = [line for line in _overview_board(generate_overview(_load_plus()))
+            if re.match(r"\|\s*\d+\s*\|", line)]
+    assert rows[0] == "| 1 | 北天药宗 | 29 | 72 |"
+    assert rows[11] == "| 12 | 霸刀 | 15 | 36 |"
+    assert rows[20] == "| 21 | 流派·无相楼 | 6 | 36 |"
+
+
+def test_overview_deterministic_regeneration():
+    """验收：总览连续生成两次，产出逐字节一致。"""
+    datas = _load_plus()
+    assert generate_overview(datas) == generate_overview(datas)
+    out_dir = Path(tempfile.mkdtemp())
+    p1 = generate_overview_file(PLUS_DIR, out_dir)
+    first = p1.read_bytes()
+    p2 = generate_overview_file(PLUS_DIR, out_dir)
+    assert p1 == p2 and p1.name == f"{OVERVIEW_BASE}-总览.md"
+    assert p2.read_bytes() == first
 
 
 def _run_all() -> int:

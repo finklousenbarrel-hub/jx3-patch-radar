@@ -17,8 +17,9 @@ jx3-patch-radar/
 │   ├── parse_patch.py   # 解析：txt → 结构化 JSON（门派/心法/条目，含 notes、is_shared）
 │   │                    #   也解析 extra-info/plus/*.md → 同目录 .json（含 qixue_table）
 │   ├── make_report.py   # 简报：json → Markdown（标题头 → 改动变化榜 → 分门派详情）
+│   │                    #   也读 plus/*.json → 首轮技改总览（跨门派改动奇穴排行榜，简报 012）
 │   └── fetch_link_info.py # 子文章：json notes 链接 → 官网 api.php → 全文 txt + plus Markdown
-├── tests/               # pytest：4 个测试文件（共 51 项）
+├── tests/               # pytest：4 个测试文件（共 55 项）
 ├── data/
 │   ├── patches/         # *.txt（清洗后正文）+ *.json（结构化解析结果）
 │   ├── extra-info/      # 门派子文章全文 txt（文件名=文章标题）
@@ -33,7 +34,7 @@ jx3-patch-radar/
 └── requirements.txt
 ```
 
-关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file`（make_report）。
+关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）。
 
 ## 怎么运行和验证
 
@@ -41,13 +42,14 @@ jx3-patch-radar/
 pip install -r requirements.txt
 python src/fetch_news.py     # 增量抓取 + 解析；第二次运行应输出“本次新增 0 条”
 python src/make_report.py    # 全量重建 reports/*.md
-python -m pytest tests/ -q   # 应 30 passed（各测试文件也可直接 python 运行）
+python -m pytest tests/ -q   # 应 55 passed（各测试文件也可直接 python 运行）
 ```
 
 验收基线（改动后必查）：
 
 - 9/24 JSON：门派 21 / 心法 65 / 条目 352；「沁逸」条目同时含原效果与「调整为：」文本
 - 9/8 JSON：文本字数 ≥ 原 txt 95%（防静默丢数据）；少林下「旗舰通用」is_shared = true
+- 首轮总览（plus json → reports/*-总览.md）：门派 21 / 奇穴 1152 / 改动 346，排行榜改动数合计 = 346
 - 删 data/state.json 重跑能完整重建，且 txt/json 逐字节一致
 - 简报连续生成两次，逐字节一致（输出不含时间戳）
 
