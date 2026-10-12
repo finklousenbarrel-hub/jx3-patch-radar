@@ -55,6 +55,7 @@ python -m pytest tests/ -q   # 应 55 passed（各测试文件也可直接 pytho
 
 ## 铁律（不许碰）
 
+- 通用铁律（假完成/越权写入防御）见 hello-engineering/docs/universal-rules.md，本项目铁律为其特化补充
 - parse_patch 只读已清洗的 txt，**不碰 HTML**；make_report 只读 JSON，**不碰网络**
 - 增量运行时（state.json 存在），已处理公告的 txt/json **不得改动或重写**，只处理新增条目
 - 公告唯一标识一律用 **url**（缺失时回退标题并告警）
@@ -62,4 +63,3 @@ python -m pytest tests/ -q   # 应 55 passed（各测试文件也可直接 pytho
 - 简报是派生物：每次全量重新生成、直接覆盖，不要在 make_report 里加增量逻辑或时间戳
 - 条目续段（「调整为：…」等不以 · 开头的行）必须并入上一条目，不得拆散或丢弃
 - jx3api 会拒绝 Python requests 的 TLS 握手：fetch_records 已内置 curl 回退通道，不要拆掉；subprocess 调 curl 必须用字节捕获（Windows GBK 会毁掉 UTF-8 输出）
-- 简报模板加"改动边界"字段
