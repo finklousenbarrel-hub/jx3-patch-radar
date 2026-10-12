@@ -62,3 +62,4 @@ python -m pytest tests/ -q   # 应 55 passed（各测试文件也可直接 pytho
 - 简报是派生物：每次全量重新生成、直接覆盖，不要在 make_report 里加增量逻辑或时间戳
 - 条目续段（「调整为：…」等不以 · 开头的行）必须并入上一条目，不得拆散或丢弃
 - jx3api 会拒绝 Python requests 的 TLS 握手：fetch_records 已内置 curl 回退通道，不要拆掉；subprocess 调 curl 必须用字节捕获（Windows GBK 会毁掉 UTF-8 输出）
+- 简报模板加"改动边界"字段
