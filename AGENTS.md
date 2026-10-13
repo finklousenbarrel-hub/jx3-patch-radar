@@ -18,13 +18,16 @@ jx3-patch-radar/
 │   │                    #   也解析 extra-info/plus/*.md → 同目录 .json（含 qixue_table）
 │   ├── make_report.py   # 简报：json → Markdown（标题头 → 改动变化榜 → 分门派详情）
 │   │                    #   也读 plus/*.json → 首轮技改总览（跨门派改动奇穴排行榜，简报 012）
-│   └── fetch_link_info.py # 子文章：json notes 链接 → 官网 api.php → 全文 txt + plus Markdown
-├── tests/               # pytest：4 个测试文件（共 55 项）
+│   ├── fetch_link_info.py # 子文章：json notes 链接 → 官网 api.php → 全文 txt + plus Markdown
+│   └── fetch_skill_info.py # 技能库：unua.top 快照 → 校验（22 门派/乱天狼×15/generatedAt）
+│                           #   → data/skill-info/*.json（幂等，共用 state.json）
+├── tests/               # pytest：5 个测试文件（共 67 项）
 ├── data/
 │   ├── patches/         # *.txt（清洗后正文）+ *.json（结构化解析结果）
+│   ├── skill-info/      # 技能库快照 *.json（文件名=generatedAt，保留 source 字段）
 │   ├── extra-info/      # 门派子文章全文 txt（文件名=文章标题）
 │   │   └── plus/        # 子文章 Markdown（表格还原+标红加粗）+ 解析后的 .json（qixue_table）
-│   └── state.json       # 增量状态：{公告url: {url, processed_at}}
+│   └── state.json       # 增量状态：{公告url 或 generatedAt: {url, processed_at, ...}}
 ├── reports/             # 生成的 Markdown 简报（派生物）
 ├── docs/
 │   ├── task-briefs/     # 任务简报 005~008（需求与验收标准）
@@ -34,15 +37,16 @@ jx3-patch-radar/
 └── requirements.txt
 ```
 
-关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）。
+关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）；`fetch_skill_data` / `validate_skill_data` / `snapshot_uid` / `save_snapshot` / `process_snapshot`（fetch_skill_info）。
 
 ## 怎么运行和验证
 
 ```bash
 pip install -r requirements.txt
-python src/fetch_news.py     # 增量抓取 + 解析；第二次运行应输出“本次新增 0 条”
-python src/make_report.py    # 全量重建 reports/*.md
-python -m pytest tests/ -q   # 应 55 passed（各测试文件也可直接 python 运行）
+python src/fetch_news.py       # 增量抓取 + 解析；第二次运行应输出“本次新增 0 条”
+python src/fetch_skill_info.py # 技能库快照（每天最多请求一次）；已处理应输出“本次新增 0 条”
+python src/make_report.py      # 全量重建 reports/*.md
+python -m pytest tests/ -q     # 应 67 passed（各测试文件也可直接 python 运行）
 ```
 
 验收基线（改动后必查）：
