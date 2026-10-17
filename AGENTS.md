@@ -21,11 +21,12 @@ jx3-patch-radar/
 │   ├── fetch_link_info.py # 子文章：json notes 链接 → 官网 api.php → 全文 txt + plus Markdown
 │   ├── fetch_skill_info.py # 技能库：unua.top 快照 → 校验（22 门派/乱天狼×15/generatedAt）
 │   │                       #   → data/skill-info/*.json（幂等，共用 state.json）
-│   ├── retriever.py     # 检索（简报 014/015）：技能库+技改库压平成文档库
-│   │                    #   字符级 2-gram TF-IDF + 余弦 top-3，名称命中 +0.5 加权
+│   ├── retriever.py     # 检索（简报 014/015/016）：技能库+技改库压平成文档库
+│   │                    #   字符级 2-gram TF-IDF + 余弦 top-3；名称完整互相包含 +0.5 加权（015）
+│   │                    #   模糊档（016）：name 重叠率 ≥50% 按 0.5×重叠率 加分（阈值禁止下调）
 │   └── ask.py           # 问答（简报 014，ask_demo 的升级）：任意问题 → 检索 top-3
 │                        #   → 拼 prompt → Kimi 回答（带数据日期）
-├── tests/               # pytest：7 个测试文件（共 86 项）
+├── tests/               # pytest：7 个测试文件（共 93 项）
 ├── data/
 │   ├── patches/         # *.txt（清洗后正文）+ *.json（结构化解析结果）
 │   ├── skill-info/      # 技能库快照 *.json（文件名=generatedAt，保留 source 字段）
@@ -41,7 +42,7 @@ jx3-patch-radar/
 └── requirements.txt
 ```
 
-关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）；`fetch_skill_data` / `validate_skill_data` / `snapshot_uid` / `save_snapshot` / `process_snapshot`（fetch_skill_info）；`skill_documents` / `patch_documents` / `build_documents` / `tokenize` / `TfidfIndex` / `search` / `NAME_MATCH_BOOST`（retriever）；`build_prompt` / `answer` / `ask`（ask）。
+关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）；`fetch_skill_data` / `validate_skill_data` / `snapshot_uid` / `save_snapshot` / `process_snapshot`（fetch_skill_info）；`skill_documents` / `patch_documents` / `build_documents` / `tokenize` / `TfidfIndex` / `search` / `NAME_MATCH_BOOST` / `FUZZY_OVERLAP_MIN`（retriever）；`build_prompt` / `answer` / `ask`（ask）。
 
 ## 怎么运行和验证
 
@@ -52,7 +53,7 @@ python src/fetch_skill_info.py # 技能库快照（每天最多请求一次）�
 python src/make_report.py      # 全量重建 reports/*.md
 python src/retriever.py "问题" # 检索文档库 top-3（技能 558 / 技改 1869）
 python src/ask.py "问题"       # 检索 + Kimi 问答（需 .env 的 MOONSHOT_API_KEY；无参进交互模式）
-python -m pytest tests/ -q     # 应 86 passed（各测试文件也可直接 python 运行）
+python -m pytest tests/ -q     # 应 93 passed（各测试文件也可直接 python 运行）
 ```
 
 验收基线（改动后必查）：
@@ -72,4 +73,5 @@ python -m pytest tests/ -q     # 应 86 passed（各测试文件也可直接 pyt
 - JSON 一律 UTF-8、中文不转义（ensure_ascii=False）
 - 简报是派生物：每次全量重新生成、直接覆盖，不要在 make_report 里加增量逻辑或时间戳
 - 条目续段（「调整为：…」等不以 · 开头的行）必须并入上一条目，不得拆散或丢弃
+- 模糊匹配重叠率阈值 `FUZZY_OVERLAP_MIN`（50%）**禁止下调**：低于 50% 会让「孤影化双」这类技能被「什么效果」等泛词误捞（retriever 模糊档，简报 016）
 - jx3api 会拒绝 Python requests 的 TLS 握手：fetch_records 已内置 curl 回退通道，不要拆掉；subprocess 调 curl 必须用字节捕获（Windows GBK 会毁掉 UTF-8 输出）

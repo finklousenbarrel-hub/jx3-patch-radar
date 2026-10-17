@@ -53,6 +53,29 @@ def test_skill_xinfa_fallback():
     assert docs and all(d["metadata"]["心法"] == "幽罗引" for d in docs)
 
 
+# ---------------------------------------------------------------- 字段补齐（简报 017）
+
+def test_skill_document_fields_in_text():
+    """cd/weapon/distance 进技能文档 text：验收案例 铁马冰河=调息20秒、乱天狼=调息15秒。"""
+    tiema = next(d for d in SKILL_DOCS if d["name"] == "铁马冰河")
+    assert "调息20秒" in tiema["text"]
+    assert "武器：链刃" in tiema["text"]
+    assert "距离：无" in tiema["text"]
+    lang = next(d for d in SKILL_DOCS if d["text"].startswith("乱天狼"))
+    assert "调息15秒" in lang["text"]
+    assert lang["text"].splitlines()[0] == "乱天狼"  # skillName 仍是首行
+
+
+def test_skill_document_fields_acceptance_search():
+    """验收检索：cd 问法下技能本体居 top-1 且 text 含可回答的 cd 值。"""
+    top = search("凌雪的铁马冰河cd多久")[0]
+    assert top["metadata"]["类型"] == "技能" and top["name"] == "铁马冰河"
+    assert "调息20秒" in top["text"]
+    top = search("乱天狼cd多久")[0]
+    assert top["metadata"]["类型"] == "技能" and top["name"] == "乱天狼"
+    assert "调息15秒" in top["text"]
+
+
 # ---------------------------------------------------------------- 文档库：技改库
 
 def test_patch_documents_count():
@@ -164,14 +187,15 @@ def _doc(doc_id: str, name: str, text: str) -> dict:
 
 
 def test_name_boost_flips_ranking():
-    """加权逻辑：名称完整命中问题 -> +0.5 反超纯余弦更高的文档。"""
-    doc_a = _doc("a", "青冥剑", "青冥剑\n效果独特的冷门招式，需要在特定场合才能施展，泛用性一般。")
-    doc_b = _doc("b", "剑甲", "青冥剑青冥剑青冥剑，配合剑甲使用。")
+    """加权逻辑：完整命中 +0.5 必反超；模糊档加分有界，高热文档仍可居首。"""
+    tail = "，疗伤秘术绵延不绝生生不息护佑苍生泽被万物精微奥妙"
+    doc_a = _doc("a", "千蝶吐瑞", "千蝶吐瑞" + tail)
+    doc_b = _doc("b", "蚕引", "蚕引，施展时" + "是什么效果" * 2)
     index = TfidfIndex([doc_a, doc_b])
-    # 对照问题（名称未完整命中）：纯余弦排序，高热文档在前
-    assert index.search("青冥好用吗")[0]["name"] == "剑甲"
-    # 名称完整命中后：本体反超到 top-1
-    assert index.search("青冥剑值得点吗")[0]["name"] == "青冥剑"
+    # 错别字：doc_a 仅模糊档 +0.375，doc_b 余弦领先更大 -> 高热文档仍居首
+    assert index.search("千蝶吐蕊是什么效果")[0]["name"] == "蚕引"
+    # 名称完整命中：+0.5 本体反超到 top-1
+    assert index.search("千蝶吐瑞是什么效果")[0]["name"] == "千蝶吐瑞"
 
 
 def test_name_boost_requires_two_char_name():
@@ -185,6 +209,48 @@ def test_name_boost_requires_two_char_name():
     assert hits[0]["score"] - hits[1]["score"] == pytest.approx(0.5)
     assert {h["name"] for h in hits[1:]} == {"剑", "剑甲"}  # 单字/未命中：同分
     assert hits[1]["score"] == hits[2]["score"]
+
+
+# ---------------------------------------------------------------- 模糊命中（简报 016）
+
+def test_fuzzy_name_boost_typo_acceptance():
+    """验收：错别字「千蝶吐蕊」问法 top-1 必须是技能本体「千蝶吐瑞」。"""
+    top = search("奶毒的千蝶吐蕊技能是什么效果")[0]
+    assert top["metadata"]["类型"] == "技能"
+    assert top["name"] == "千蝶吐瑞"
+
+
+def test_fuzzy_name_boost_abbrev_acceptance():
+    """验收：「千蝶」简写问法 top-1 必须是技能本体「千蝶吐瑞」。"""
+    top = search("奶毒的千蝶技能是什么效果")[0]
+    assert top["metadata"]["类型"] == "技能"
+    assert top["name"] == "千蝶吐瑞"
+
+
+def test_fuzzy_boost_partial_overlap_amount():
+    """加分量 = 0.5 × 重叠率：错别字散点命中集合 2/3、连续 3/4，取大后 +0.375。"""
+    text = "疗伤技，能为气血最低的目标恢复气血，效果独特。"
+    index = TfidfIndex([_doc("a", "千蝶吐瑞", text), _doc("b", "蚕引", text)])
+    hits = index.search("千蝶吐蕊是什么效果")
+    assert hits[0]["name"] == "千蝶吐瑞"            # 反超同余弦的未命中文档
+    assert hits[0]["score"] - hits[1]["score"] == pytest.approx(0.5 * 0.75)
+
+
+def test_fuzzy_boost_abbrev_coverage_amount():
+    """简写档：bigram 集合口径仅 1/3 不达线，连续命中率 2/4 = 50% 踩线 +0.25。"""
+    text = "疗伤技，能为气血最低的目标恢复气血，效果独特。"
+    index = TfidfIndex([_doc("a", "千蝶吐瑞", text), _doc("b", "蚕引", text)])
+    hits = index.search("千蝶是什么效果")
+    assert hits[0]["name"] == "千蝶吐瑞"
+    assert hits[0]["score"] - hits[1]["score"] == pytest.approx(0.25)
+
+
+def test_fuzzy_boost_below_threshold_no_boost():
+    """红线：泛词（什么效果）对「孤影化双」零 bigram 命中，同文本文档同分不加权。"""
+    text = "独门身法，施展会化为双影，身形难觅，效果独特。"
+    index = TfidfIndex([_doc("a", "孤影化双", text), _doc("b", "蚕引", text)])
+    hits = index.search("这个技能是什么效果")
+    assert hits[0]["score"] == hits[1]["score"]
 
 
 if __name__ == "__main__":

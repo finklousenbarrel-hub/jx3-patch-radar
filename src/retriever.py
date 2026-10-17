@@ -3,7 +3,7 @@
 
 文档粒度：
 - 技能库（data/skill-info 最新快照）：每个技能一条文档
-  文本 = skillName + simpleDesc + desc
+  文本 = skillName + 字段行（cd/weapon/distance，简报 017）+ simpleDesc + desc
   metadata = {"门派": ..., "心法": ..., "类型": "技能"}
   只索引 skillData[].remarks[].forceSkills[]（快照中唯一齐备
   skillName/simpleDesc/desc 三字段的技能集合）；阵法 zhenFa、奇穴
@@ -20,7 +20,12 @@
 检索：字符级 2-gram TF-IDF + 余弦相似度，返回 top-3；
 名称命中加权（简报 015）：每条文档带 name 字段（技能=skillName，
 技改条目=冒号/括号前的前缀，奇穴表行=「名称」列），问题字串与 name
-完整互相包含时该文档 +NAME_MATCH_BOOST，技能本体不再被短文档挤掉。
+完整互相包含时该文档 +NAME_MATCH_BOOST，技能本体不再被短文档挤掉；
+名称模糊命中（简报 016）：非精确输入（错别字/简写）下按 name 与问题的
+重叠率加分 = NAME_MATCH_BOOST × 重叠率。重叠率取两口径较大者——bigram
+集合重叠率（散点命中，如「千蝶吐蕊」命中 千蝶/蝶吐 2/3）与连续命中率
+（前缀简写，如「千蝶」连续命中 2/4 字符）。阈值 FUZZY_OVERLAP_MIN 禁止
+下调：低于 50% 会让「孤影化双」类技能被「什么效果」等泛词误捞。
 
 对外接口（可被其他模块 import）：
     load_latest_snapshot(dir_path)         读最新技能库快照（文件名即 generatedAt）
@@ -54,6 +59,10 @@ DOC_TYPE_PATCH = "技改"
 NAME_MATCH_BOOST = 0.5
 # name 达到该长度才参与加权（单字 name 误伤面太大）
 _NAME_MIN_LEN = 2
+# 模糊档（简报 016）的重叠率下限：bigram 集合或连续命中任一口径达到该比例
+# 才加分。禁止下调——低于 50% 时「什么效果」之类的泛词足以让「孤影化双」
+# 这类 4 字技能被误捞（单 stray bigram 即达线）。
+FUZZY_OVERLAP_MIN = 0.5
 
 _WS_RE = re.compile(r"\s+")
 # 技改条目的条目名：冒号/括号前的前缀（如「第四重奇穴【沁逸】」「招式【乱洒青荷】」）
@@ -74,6 +83,9 @@ def load_latest_snapshot(dir_path: str | Path = SKILL_INFO_DIR) -> dict:
 def skill_documents(snapshot: dict) -> list[dict]:
     """把技能库快照压平成文档列表：每个 forceSkill 一条文档。
 
+    文本 = skillName + 字段行（cd/weapon/distance，简报 017）+ simpleDesc
+    + desc；字段缺失时跳过对应片段。
+
     :param snapshot: fetch_skill_info 落盘的全量快照（含 forces/generatedAt）
     :return: [{"id", "text", "metadata"}]，metadata = {门派, 心法, 类型:"技能"}
     """
@@ -91,7 +103,12 @@ def skill_documents(snapshot: dict) -> list[dict]:
             xinfa = kungfu_names.get(raw_kungfu, raw_kungfu)
             for remark in sd.get("remarks", []):
                 for skill in remark.get("forceSkills", []):
-                    text = "\n".join(p for p in (skill.get("skillName", ""),
+                    fields = "，".join(p for p in (
+                        skill.get("cd", ""),
+                        f"武器：{skill['weapon']}" if skill.get("weapon") else "",
+                        f"距离：{skill['distance']}" if skill.get("distance") else "",
+                    ) if p)
+                    text = "\n".join(p for p in (skill.get("skillName", ""), fields,
                                                  skill.get("simpleDesc", ""),
                                                  skill.get("desc", "")) if p)
                     docs.append({
@@ -203,12 +220,18 @@ class TfidfIndex:
         self.docs: list[dict] = []
         self._idf: dict[str, float] = {}
         self._postings: dict[str, list[tuple[int, float]]] = {}
+        self._name_bigrams: list[list[str]] = []
         if docs:
             self.add_documents(docs)
 
     def add_documents(self, docs: list[dict]) -> None:
         """重建索引（文档库是全量派生物，重建即刷新）。"""
         self.docs = list(docs)
+        self._name_bigrams = [
+            tokenize(d.get("name", "")) if len(d.get("name", "")) >= _NAME_MIN_LEN
+            else []
+            for d in self.docs
+        ]
         term_counts = [Counter(tokenize(d["text"])) for d in self.docs]
         n_docs = len(self.docs)
 
@@ -232,6 +255,9 @@ class TfidfIndex:
 
         名称命中加权（简报 015）：问题字串与文档 name（≥2 字）完整互相
         包含时，该文档得分 +NAME_MATCH_BOOST，再参与排序。
+        名称模糊命中（简报 016）：未完整包含时，按 name bigram 与问题的
+        重叠率（集合重叠率、连续命中率取大）加分 NAME_MATCH_BOOST × 重叠率，
+        仅当重叠率 ≥ FUZZY_OVERLAP_MIN 时生效。
         无词面重叠（得分全零）时返回空列表，而不是任意文档。
         """
         q_counts = Counter(tokenize(question))
@@ -247,11 +273,25 @@ class TfidfIndex:
                     + (q_weight / q_norm) * d_weight
 
         q_flat = _WS_RE.sub("", question)
+        q_grams = set(q_counts)
         for doc_idx, score in scores.items():
             name = self.docs[doc_idx].get("name", "")
-            if q_flat and len(name) >= _NAME_MIN_LEN \
-                    and (name in q_flat or q_flat in name):
+            name_grams = self._name_bigrams[doc_idx]
+            if not q_flat or not name_grams:
+                continue
+            if name in q_flat or q_flat in name:
                 scores[doc_idx] = score + NAME_MATCH_BOOST
+                continue
+            matched = [g in q_grams for g in name_grams]
+            set_ratio = sum(matched) / len(name_grams)
+            run = best = 0
+            for ok in matched:
+                run = run + 1 if ok else 0
+                best = max(best, run)
+            coverage = (best + 1) / len(name) if best else 0.0
+            fuzzy_ratio = max(set_ratio, coverage)
+            if fuzzy_ratio >= FUZZY_OVERLAP_MIN:
+                scores[doc_idx] = score + NAME_MATCH_BOOST * fuzzy_ratio
 
         ranked = sorted(scores.items(), key=lambda kv: (-kv[1], kv[0]))[:top_k]
         return [{**self.docs[i], "score": score} for i, score in ranked]
