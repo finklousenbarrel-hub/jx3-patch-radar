@@ -1,0 +1,739 @@
+{
+  "snapshot_date": "2026-10-24",
+  "source": "推栏 /jjcrankstats/kungfu-rank/query",
+  "score_range": {
+    "min": 1000,
+    "max": 3300
+  },
+  "match_mode": "all",
+  "periods": [
+    {
+      "period_type": "node",
+      "period_name": "7月13日-至今"
+    },
+    {
+      "period_type": "last7d",
+      "period_name": "近7天"
+    },
+    {
+      "period_type": "last1d",
+      "period_name": "近1天"
+    }
+  ],
+  "rankings": {
+    "dps-node": {
+      "kungfu_type": "dps",
+      "period_type": "node",
+      "total": 23,
+      "rows": [
+        {
+          "rank": 1,
+          "kungfu_id": "10821",
+          "kungfu_name": "幽罗引",
+          "appear_rate": 0.0242,
+          "win_rate": 0.5331,
+          "can_recommend": false
+        },
+        {
+          "rank": 2,
+          "kungfu_id": "10081",
+          "kungfu_name": "冰心诀",
+          "appear_rate": 0.0617,
+          "win_rate": 0.5041,
+          "can_recommend": false
+        },
+        {
+          "rank": 3,
+          "kungfu_id": "10464",
+          "kungfu_name": "北傲诀",
+          "appear_rate": 0.0712,
+          "win_rate": 0.4976,
+          "can_recommend": false
+        },
+        {
+          "rank": 4,
+          "kungfu_id": "10026",
+          "kungfu_name": "傲血战意",
+          "appear_rate": 0.0785,
+          "win_rate": 0.4927,
+          "can_recommend": false
+        },
+        {
+          "rank": 5,
+          "kungfu_id": "10242",
+          "kungfu_name": "焚影圣诀",
+          "appear_rate": 0.0422,
+          "win_rate": 0.5097,
+          "can_recommend": false
+        },
+        {
+          "rank": 6,
+          "kungfu_id": "10390",
+          "kungfu_name": "分山劲",
+          "appear_rate": 0.0413,
+          "win_rate": 0.5094,
+          "can_recommend": false
+        },
+        {
+          "rank": 7,
+          "kungfu_id": "10786",
+          "kungfu_name": "周天功",
+          "appear_rate": 0.034,
+          "win_rate": 0.5126,
+          "can_recommend": false
+        },
+        {
+          "rank": 8,
+          "kungfu_id": "10698",
+          "kungfu_name": "孤锋诀",
+          "appear_rate": 0.0702,
+          "win_rate": 0.4946,
+          "can_recommend": false
+        },
+        {
+          "rank": 9,
+          "kungfu_id": "10015",
+          "kungfu_name": "太虚剑意",
+          "appear_rate": 0.0527,
+          "win_rate": 0.5031,
+          "can_recommend": false
+        },
+        {
+          "rank": 10,
+          "kungfu_id": "10533",
+          "kungfu_name": "凌海诀",
+          "appear_rate": 0.0464,
+          "win_rate": 0.506,
+          "can_recommend": false
+        },
+        {
+          "rank": 11,
+          "kungfu_id": "10175",
+          "kungfu_name": "毒经",
+          "appear_rate": 0.0775,
+          "win_rate": 0.4895,
+          "can_recommend": false
+        },
+        {
+          "rank": 12,
+          "kungfu_id": "10615",
+          "kungfu_name": "太玄经",
+          "appear_rate": 0.0329,
+          "win_rate": 0.5099,
+          "can_recommend": false
+        },
+        {
+          "rank": 13,
+          "kungfu_id": "10144",
+          "kungfu_name": "藏剑",
+          "appear_rate": 0.0796,
+          "win_rate": 0.4866,
+          "can_recommend": false
+        },
+        {
+          "rank": 14,
+          "kungfu_id": "10756",
+          "kungfu_name": "山海心诀",
+          "appear_rate": 0.0293,
+          "win_rate": 0.5107,
+          "can_recommend": false
+        },
+        {
+          "rank": 15,
+          "kungfu_id": "10627",
+          "kungfu_name": "无方",
+          "appear_rate": 0.0271,
+          "win_rate": 0.5079,
+          "can_recommend": false
+        },
+        {
+          "rank": 16,
+          "kungfu_id": "10021",
+          "kungfu_name": "花间游",
+          "appear_rate": 0.0499,
+          "win_rate": 0.4954,
+          "can_recommend": false
+        },
+        {
+          "rank": 17,
+          "kungfu_id": "10225",
+          "kungfu_name": "天罗诡道",
+          "appear_rate": 0.0174,
+          "win_rate": 0.51,
+          "can_recommend": false
+        },
+        {
+          "rank": 18,
+          "kungfu_id": "10447",
+          "kungfu_name": "莫问",
+          "appear_rate": 0.0301,
+          "win_rate": 0.5038,
+          "can_recommend": false
+        },
+        {
+          "rank": 19,
+          "kungfu_id": "10014",
+          "kungfu_name": "紫霞功",
+          "appear_rate": 0.0346,
+          "win_rate": 0.4944,
+          "can_recommend": false
+        },
+        {
+          "rank": 20,
+          "kungfu_id": "10268",
+          "kungfu_name": "笑尘诀",
+          "appear_rate": 0.0327,
+          "win_rate": 0.4942,
+          "can_recommend": false
+        },
+        {
+          "rank": 21,
+          "kungfu_id": "10224",
+          "kungfu_name": "惊羽诀",
+          "appear_rate": 0.0281,
+          "win_rate": 0.4938,
+          "can_recommend": false
+        },
+        {
+          "rank": 22,
+          "kungfu_id": "10585",
+          "kungfu_name": "隐龙诀",
+          "appear_rate": 0.0278,
+          "win_rate": 0.4939,
+          "can_recommend": false
+        },
+        {
+          "rank": 23,
+          "kungfu_id": "10003",
+          "kungfu_name": "易筋经",
+          "appear_rate": 0.0108,
+          "win_rate": 0.4975,
+          "can_recommend": false
+        }
+      ]
+    },
+    "dps-last7d": {
+      "kungfu_type": "dps",
+      "period_type": "last7d",
+      "total": 23,
+      "rows": [
+        {
+          "rank": 1,
+          "kungfu_id": "10821",
+          "kungfu_name": "幽罗引",
+          "appear_rate": 0.0242,
+          "win_rate": 0.5441,
+          "can_recommend": false
+        },
+        {
+          "rank": 2,
+          "kungfu_id": "10026",
+          "kungfu_name": "傲血战意",
+          "appear_rate": 0.0823,
+          "win_rate": 0.4931,
+          "can_recommend": false
+        },
+        {
+          "rank": 3,
+          "kungfu_id": "10533",
+          "kungfu_name": "凌海诀",
+          "appear_rate": 0.0479,
+          "win_rate": 0.5111,
+          "can_recommend": false
+        },
+        {
+          "rank": 4,
+          "kungfu_id": "10786",
+          "kungfu_name": "周天功",
+          "appear_rate": 0.0351,
+          "win_rate": 0.5178,
+          "can_recommend": false
+        },
+        {
+          "rank": 5,
+          "kungfu_id": "10081",
+          "kungfu_name": "冰心诀",
+          "appear_rate": 0.0609,
+          "win_rate": 0.5025,
+          "can_recommend": false
+        },
+        {
+          "rank": 6,
+          "kungfu_id": "10144",
+          "kungfu_name": "藏剑",
+          "appear_rate": 0.0848,
+          "win_rate": 0.4887,
+          "can_recommend": false
+        },
+        {
+          "rank": 7,
+          "kungfu_id": "10698",
+          "kungfu_name": "孤锋诀",
+          "appear_rate": 0.0742,
+          "win_rate": 0.4942,
+          "can_recommend": false
+        },
+        {
+          "rank": 8,
+          "kungfu_id": "10464",
+          "kungfu_name": "北傲诀",
+          "appear_rate": 0.0732,
+          "win_rate": 0.4946,
+          "can_recommend": false
+        },
+        {
+          "rank": 9,
+          "kungfu_id": "10390",
+          "kungfu_name": "分山劲",
+          "appear_rate": 0.0395,
+          "win_rate": 0.5122,
+          "can_recommend": false
+        },
+        {
+          "rank": 10,
+          "kungfu_id": "10242",
+          "kungfu_name": "焚影圣诀",
+          "appear_rate": 0.0423,
+          "win_rate": 0.5095,
+          "can_recommend": false
+        },
+        {
+          "rank": 11,
+          "kungfu_id": "10175",
+          "kungfu_name": "毒经",
+          "appear_rate": 0.0732,
+          "win_rate": 0.4901,
+          "can_recommend": false
+        },
+        {
+          "rank": 12,
+          "kungfu_id": "10615",
+          "kungfu_name": "太玄经",
+          "appear_rate": 0.0328,
+          "win_rate": 0.5112,
+          "can_recommend": false
+        },
+        {
+          "rank": 13,
+          "kungfu_id": "10015",
+          "kungfu_name": "太虚剑意",
+          "appear_rate": 0.0521,
+          "win_rate": 0.4995,
+          "can_recommend": false
+        },
+        {
+          "rank": 14,
+          "kungfu_id": "10447",
+          "kungfu_name": "莫问",
+          "appear_rate": 0.029,
+          "win_rate": 0.5086,
+          "can_recommend": false
+        },
+        {
+          "rank": 15,
+          "kungfu_id": "10021",
+          "kungfu_name": "花间游",
+          "appear_rate": 0.0513,
+          "win_rate": 0.494,
+          "can_recommend": false
+        },
+        {
+          "rank": 16,
+          "kungfu_id": "10756",
+          "kungfu_name": "山海心诀",
+          "appear_rate": 0.0257,
+          "win_rate": 0.5075,
+          "can_recommend": false
+        },
+        {
+          "rank": 17,
+          "kungfu_id": "10225",
+          "kungfu_name": "天罗诡道",
+          "appear_rate": 0.0134,
+          "win_rate": 0.5112,
+          "can_recommend": false
+        },
+        {
+          "rank": 18,
+          "kungfu_id": "10014",
+          "kungfu_name": "紫霞功",
+          "appear_rate": 0.039,
+          "win_rate": 0.4954,
+          "can_recommend": false
+        },
+        {
+          "rank": 19,
+          "kungfu_id": "10627",
+          "kungfu_name": "无方",
+          "appear_rate": 0.0225,
+          "win_rate": 0.5021,
+          "can_recommend": false
+        },
+        {
+          "rank": 20,
+          "kungfu_id": "10224",
+          "kungfu_name": "惊羽诀",
+          "appear_rate": 0.025,
+          "win_rate": 0.496,
+          "can_recommend": false
+        },
+        {
+          "rank": 21,
+          "kungfu_id": "10585",
+          "kungfu_name": "隐龙诀",
+          "appear_rate": 0.0308,
+          "win_rate": 0.4921,
+          "can_recommend": false
+        },
+        {
+          "rank": 22,
+          "kungfu_id": "10268",
+          "kungfu_name": "笑尘诀",
+          "appear_rate": 0.031,
+          "win_rate": 0.491,
+          "can_recommend": false
+        },
+        {
+          "rank": 23,
+          "kungfu_id": "10003",
+          "kungfu_name": "易筋经",
+          "appear_rate": 0.01,
+          "win_rate": 0.4867,
+          "can_recommend": false
+        }
+      ]
+    },
+    "dps-last1d": {
+      "kungfu_type": "dps",
+      "period_type": "last1d",
+      "total": 23,
+      "rows": [
+        {
+          "rank": 1,
+          "kungfu_id": "10821",
+          "kungfu_name": "幽罗引",
+          "appear_rate": 0.027,
+          "win_rate": 0.5515,
+          "can_recommend": false
+        },
+        {
+          "rank": 2,
+          "kungfu_id": "10144",
+          "kungfu_name": "藏剑",
+          "appear_rate": 0.0867,
+          "win_rate": 0.4958,
+          "can_recommend": false
+        },
+        {
+          "rank": 3,
+          "kungfu_id": "10698",
+          "kungfu_name": "孤锋诀",
+          "appear_rate": 0.0737,
+          "win_rate": 0.5014,
+          "can_recommend": false
+        },
+        {
+          "rank": 4,
+          "kungfu_id": "10533",
+          "kungfu_name": "凌海诀",
+          "appear_rate": 0.0488,
+          "win_rate": 0.5189,
+          "can_recommend": false
+        },
+        {
+          "rank": 5,
+          "kungfu_id": "10026",
+          "kungfu_name": "傲血战意",
+          "appear_rate": 0.0789,
+          "win_rate": 0.4926,
+          "can_recommend": false
+        },
+        {
+          "rank": 6,
+          "kungfu_id": "10464",
+          "kungfu_name": "北傲诀",
+          "appear_rate": 0.0695,
+          "win_rate": 0.498,
+          "can_recommend": false
+        },
+        {
+          "rank": 7,
+          "kungfu_id": "10390",
+          "kungfu_name": "分山劲",
+          "appear_rate": 0.0401,
+          "win_rate": 0.5189,
+          "can_recommend": false
+        },
+        {
+          "rank": 8,
+          "kungfu_id": "10014",
+          "kungfu_name": "紫霞功",
+          "appear_rate": 0.0451,
+          "win_rate": 0.515,
+          "can_recommend": false
+        },
+        {
+          "rank": 9,
+          "kungfu_id": "10081",
+          "kungfu_name": "冰心诀",
+          "appear_rate": 0.0677,
+          "win_rate": 0.495,
+          "can_recommend": false
+        },
+        {
+          "rank": 10,
+          "kungfu_id": "10615",
+          "kungfu_name": "太玄经",
+          "appear_rate": 0.0332,
+          "win_rate": 0.5165,
+          "can_recommend": false
+        },
+        {
+          "rank": 11,
+          "kungfu_id": "10015",
+          "kungfu_name": "太虚剑意",
+          "appear_rate": 0.0477,
+          "win_rate": 0.5057,
+          "can_recommend": false
+        },
+        {
+          "rank": 12,
+          "kungfu_id": "10175",
+          "kungfu_name": "毒经",
+          "appear_rate": 0.073,
+          "win_rate": 0.477,
+          "can_recommend": false
+        },
+        {
+          "rank": 13,
+          "kungfu_id": "10786",
+          "kungfu_name": "周天功",
+          "appear_rate": 0.0358,
+          "win_rate": 0.5021,
+          "can_recommend": false
+        },
+        {
+          "rank": 14,
+          "kungfu_id": "10756",
+          "kungfu_name": "山海心诀",
+          "appear_rate": 0.0235,
+          "win_rate": 0.5081,
+          "can_recommend": false
+        },
+        {
+          "rank": 15,
+          "kungfu_id": "10224",
+          "kungfu_name": "惊羽诀",
+          "appear_rate": 0.0234,
+          "win_rate": 0.5073,
+          "can_recommend": false
+        },
+        {
+          "rank": 16,
+          "kungfu_id": "10627",
+          "kungfu_name": "无方",
+          "appear_rate": 0.0253,
+          "win_rate": 0.502,
+          "can_recommend": false
+        },
+        {
+          "rank": 17,
+          "kungfu_id": "10242",
+          "kungfu_name": "焚影圣诀",
+          "appear_rate": 0.0417,
+          "win_rate": 0.4903,
+          "can_recommend": false
+        },
+        {
+          "rank": 18,
+          "kungfu_id": "10021",
+          "kungfu_name": "花间游",
+          "appear_rate": 0.0479,
+          "win_rate": 0.4847,
+          "can_recommend": false
+        },
+        {
+          "rank": 19,
+          "kungfu_id": "10585",
+          "kungfu_name": "隐龙诀",
+          "appear_rate": 0.031,
+          "win_rate": 0.4967,
+          "can_recommend": false
+        },
+        {
+          "rank": 20,
+          "kungfu_id": "10225",
+          "kungfu_name": "天罗诡道",
+          "appear_rate": 0.0113,
+          "win_rate": 0.5061,
+          "can_recommend": false
+        },
+        {
+          "rank": 21,
+          "kungfu_id": "10268",
+          "kungfu_name": "笑尘诀",
+          "appear_rate": 0.0273,
+          "win_rate": 0.4924,
+          "can_recommend": false
+        },
+        {
+          "rank": 22,
+          "kungfu_id": "10447",
+          "kungfu_name": "莫问",
+          "appear_rate": 0.0299,
+          "win_rate": 0.4802,
+          "can_recommend": false
+        },
+        {
+          "rank": 23,
+          "kungfu_id": "10003",
+          "kungfu_name": "易筋经",
+          "appear_rate": 0.0112,
+          "win_rate": 0.4904,
+          "can_recommend": false
+        }
+      ]
+    },
+    "tps-node": {
+      "kungfu_type": "tps",
+      "period_type": "node",
+      "total": 5,
+      "rows": [
+        {
+          "rank": 1,
+          "kungfu_id": "10028",
+          "kungfu_name": "离经易道",
+          "appear_rate": 0.306,
+          "win_rate": 0.5015,
+          "can_recommend": false
+        },
+        {
+          "rank": 2,
+          "kungfu_id": "10448",
+          "kungfu_name": "相知",
+          "appear_rate": 0.1223,
+          "win_rate": 0.5145,
+          "can_recommend": false
+        },
+        {
+          "rank": 3,
+          "kungfu_id": "10176",
+          "kungfu_name": "补天诀",
+          "appear_rate": 0.2215,
+          "win_rate": 0.5028,
+          "can_recommend": false
+        },
+        {
+          "rank": 4,
+          "kungfu_id": "10080",
+          "kungfu_name": "云裳心经",
+          "appear_rate": 0.2304,
+          "win_rate": 0.4944,
+          "can_recommend": false
+        },
+        {
+          "rank": 5,
+          "kungfu_id": "10626",
+          "kungfu_name": "灵素",
+          "appear_rate": 0.1198,
+          "win_rate": 0.4892,
+          "can_recommend": false
+        }
+      ]
+    },
+    "tps-last7d": {
+      "kungfu_type": "tps",
+      "period_type": "last7d",
+      "total": 5,
+      "rows": [
+        {
+          "rank": 1,
+          "kungfu_id": "10028",
+          "kungfu_name": "离经易道",
+          "appear_rate": 0.321,
+          "win_rate": 0.5014,
+          "can_recommend": false
+        },
+        {
+          "rank": 2,
+          "kungfu_id": "10448",
+          "kungfu_name": "相知",
+          "appear_rate": 0.1163,
+          "win_rate": 0.5203,
+          "can_recommend": false
+        },
+        {
+          "rank": 3,
+          "kungfu_id": "10176",
+          "kungfu_name": "补天诀",
+          "appear_rate": 0.2339,
+          "win_rate": 0.4975,
+          "can_recommend": false
+        },
+        {
+          "rank": 4,
+          "kungfu_id": "10080",
+          "kungfu_name": "云裳心经",
+          "appear_rate": 0.2243,
+          "win_rate": 0.4972,
+          "can_recommend": false
+        },
+        {
+          "rank": 5,
+          "kungfu_id": "10626",
+          "kungfu_name": "灵素",
+          "appear_rate": 0.1046,
+          "win_rate": 0.486,
+          "can_recommend": false
+        }
+      ]
+    },
+    "tps-last1d": {
+      "kungfu_type": "tps",
+      "period_type": "last1d",
+      "total": 5,
+      "rows": [
+        {
+          "rank": 1,
+          "kungfu_id": "10028",
+          "kungfu_name": "离经易道",
+          "appear_rate": 0.331,
+          "win_rate": 0.4969,
+          "can_recommend": false
+        },
+        {
+          "rank": 2,
+          "kungfu_id": "10448",
+          "kungfu_name": "相知",
+          "appear_rate": 0.1119,
+          "win_rate": 0.5233,
+          "can_recommend": false
+        },
+        {
+          "rank": 3,
+          "kungfu_id": "10080",
+          "kungfu_name": "云裳心经",
+          "appear_rate": 0.2394,
+          "win_rate": 0.5013,
+          "can_recommend": false
+        },
+        {
+          "rank": 4,
+          "kungfu_id": "10176",
+          "kungfu_name": "补天诀",
+          "appear_rate": 0.2154,
+          "win_rate": 0.4994,
+          "can_recommend": false
+        },
+        {
+          "rank": 5,
+          "kungfu_id": "10626",
+          "kungfu_name": "灵素",
+          "appear_rate": 0.1024,
+          "win_rate": 0.4833,
+          "can_recommend": false
+        }
+      ]
+    }
+  }
+}

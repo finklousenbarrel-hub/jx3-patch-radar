@@ -1,0 +1,106 @@
+{
+  "version": "v1",
+  "created": "2026-10-24",
+  "brief": "022",
+  "description": "剑网3问答 Agent 评测集（10 题）：3 技能（S3 为错别字变体）+ 3 技改 + 2 强度榜 + 1 复合（多工具连调）+ 1 拒答。所有标准答案均以仓库内真实数据为准，出处见各题 data_source。",
+  "rubric": {
+    "scoring": "每题按 key_points 覆盖计分（每要点 1 分）；答错核心事实 0 分。",
+    "date_required": "回答必须注明依据的数据日期（题目本身带日期的除外），未注明扣 1 分。",
+    "faithfulness": "只允许依据检索/工具返回的资料作答；资料里没有的内容不得编造（X1 专测此条）。",
+    "patch_trap_note": "技改进阶题（P2/P3）存在检索陷阱：检索 top-1 常命中 9/8 首轮公告的改前效果，Agent 必须区分公告日期、以 9/24 第二轮的「调整为：」文本为准。",
+    "tool_dependency": "R1/R2/C1 依赖名剑数据快照（data/jjc-stats、data/arena-rank），当前 ask.py 的检索库尚未接入这两类文档，现阶段预期答不出；接入后本组题转为回归基线。"
+  },
+  "questions": [
+    {
+      "id": "S1",
+      "category": "skill",
+      "difficulty": "basic",
+      "question": "镇山河是什么效果？",
+      "reference_answer": "纯阳紫霞功技能：调息240秒，产生一个4尺的气场，范围内队友免疫任何伤害，解除自身所有控制效果并卸除外功、阴性、混元性、阳性、毒性和点穴的不利效果，持续8秒；施放无视任何控制效果。",
+      "key_points": ["4尺气场", "队友免疫任何伤害", "持续8秒", "调息240秒"],
+      "data_source": "data/skill-info/2026-10-13T04-00-00.027Z.json（纯阳/紫霞功，skill-407）"
+    },
+    {
+      "id": "S2",
+      "category": "skill",
+      "difficulty": "basic",
+      "question": "乱天狼怎么打出最高伤害？",
+      "reference_answer": "凌雪阁隐龙诀技能：与目标保持中等距离时伤害最高——对处于6到12尺的目标造成伤害提高30%。技能本身每0.438秒对前方12尺60°扇形最多6个目标造成伤害，持续2.19秒，期间免疫控制和打断、不可转向。",
+      "key_points": ["6到12尺（中等距离）伤害最高", "伤害提高30%"],
+      "data_source": "data/skill-info/2026-10-13T04-00-00.027Z.json（凌雪阁/隐龙诀，skill-108）"
+    },
+    {
+      "id": "S3",
+      "category": "skill",
+      "difficulty": "typo",
+      "question": "帝参龙翔是什么效果？",
+      "question_note": "「帝参龙翔」是「帝骖龙翔」的常见错别字；已实测该错别字变体可检索到目标文档（top-1）。",
+      "reference_answer": "七秀技能（云裳心经/冰心诀同名）：调息40秒，对周围8尺内最多5个目标造成阴性内功伤害并使其定身，持续5秒。",
+      "key_points": ["识别出错别字并对应到帝骖龙翔", "8尺范围最多5个目标", "定身5秒", "调息40秒"],
+      "data_source": "data/skill-info/2026-10-13T04-00-00.027Z.json（七秀/云裳心经，skill-376；冰心诀 skill-393 同文）"
+    },
+    {
+      "id": "P1",
+      "category": "patch",
+      "difficulty": "basic",
+      "question": "衍天宗脱离战斗后的星运值回复改成了什么？",
+      "reference_answer": "9/24 第二轮公告：脱离战斗状态下的每秒星运值回复由2点调整为最大星运值的2%；秘境中脱离战斗时的星运值回复由60点调整为回复至最大值。",
+      "key_points": ["每秒2点→最大星运值的2%", "秘境脱战60点→回复至最大值"],
+      "data_source": "data/patches（2026/09/24 公告，衍天宗/太玄经）"
+    },
+    {
+      "id": "P2",
+      "category": "patch",
+      "difficulty": "advanced",
+      "question": "9月24日第二轮技改中，万花的沁逸调整了什么？",
+      "reference_answer": "花间游第四重奇穴沁逸：机甲持续攻击时间由2.5秒调整为3秒，且该伤害无视目标45%化劲等级；同时造成的伤害降低20%。",
+      "key_points": ["持续2.5秒→3秒", "无视目标45%化劲等级", "伤害降低20%", "以9/24「调整为：」文本为准，不得引用9/8改前效果"],
+      "data_source": "data/patches（2026/09/24 公告，万花/花间游）"
+    },
+    {
+      "id": "P3",
+      "category": "patch",
+      "difficulty": "advanced",
+      "question": "9月24日第二轮技改后，唐门藏形待时的击倒效果是几秒？",
+      "reference_answer": "天罗诡道第四重奇穴藏形待时：命中锁足、定身、眩晕的目标将其击倒的时长由4秒调整为5秒（暗藏杀机调息时间提高4秒的惩罚不变）。",
+      "key_points": ["击倒4秒→5秒", "以9/24「调整为：」文本为准，不得引用9/8改前效果"],
+      "data_source": "data/patches（2026/09/24 公告，唐门/天罗诡道）"
+    },
+    {
+      "id": "R1",
+      "category": "strength-rank",
+      "difficulty": "basic",
+      "question": "当前名剑大会输出心法里，综合强度榜第一的是谁？胜率多少？",
+      "reference_answer": "幽罗引，节点期（7月13日-至今）综合强度第1，胜率53.31%（口径：dps / 全分段1000~3300 / 个人+组队匹配）。",
+      "key_points": ["幽罗引", "胜率约53.3%", "注明数据日期与统计口径"],
+      "data_source": "data/jjc-stats/jjc-2026-10-24.json → rankings.dps-node"
+    },
+    {
+      "id": "R2",
+      "category": "strength-rank",
+      "difficulty": "basic",
+      "question": "3v3 名剑大会排行榜前200名里，哪个门派人数最多？",
+      "reference_answer": "长歌，33人（口径：3v3 跨区全服榜前200名）。其后为万花28人、五毒18人。",
+      "key_points": ["长歌", "33人", "口径为前200名", "注明数据日期"],
+      "data_source": "data/arena-rank/3v3-2026-10-20.json → force_stats"
+    },
+    {
+      "id": "C1",
+      "category": "compound",
+      "difficulty": "multi-tool",
+      "question": "9月24日第二轮技改削弱了花间游的沁逸，那花间游现在在名剑大会输出强度榜上排第几、胜率多少？这算削到点子上了吗？",
+      "reference_answer": "需连调两个数据源：①技改库——9/24 沁逸机甲持续2.5秒→3秒、伤害无视45%化劲、但造成伤害降低20%；②强度榜——花间游节点期综合强度第16/23，胜率49.54%（2026-10-24 快照）。开放性结论（如「排名中游偏下、胜率不过半，削弱方向与强度现状相符」）只要基于上述事实即算合理。",
+      "key_points": ["正确引用沁逸改动（见 P2）", "花间游强度第16名", "胜率约49.5%", "两个数据分别注明日期", "结论基于事实不编造"],
+      "data_source": "data/patches（2026/09/24，万花/花间游）+ data/jjc-stats/jjc-2026-10-24.json → rankings.dps-node"
+    },
+    {
+      "id": "X1",
+      "category": "refusal",
+      "difficulty": "basic",
+      "question": "剑网3下一次技改会在什么时候？",
+      "reference_answer": "资料里没有未来技改计划的信息，应明确回答不知道/资料未涵盖。",
+      "key_points": ["明确表示资料中没有该信息", "不得编造任何日期或计划"],
+      "data_source": "无（全库均无此信息）"
+    }
+  ]
+}
