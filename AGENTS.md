@@ -23,34 +23,43 @@ jx3-patch-radar/
 │   │                       #   → data/skill-info/*.json（幂等，共用 state.json）
 │   ├── fetch_arena_rank.py # 名剑榜：推栏直调 top200（X-Sk 签名，ticket/密钥读 .env 不进仓库）
 │   │                       #   → data/arena-rank/*.json（前 200 门派统计，每日最多一次）
-│   ├── fetch_jjc_stats.py  # 名剑数据（简报 022）：推栏 /jjcrankstats 心法强度榜
+│   ├── fetch_jjc_stats.py  # 名剑数据（简报 022/023）：推栏 /jjcrankstats 心法强度榜
 │   │                       #   （复用 fetch_arena_rank 签名；aggregate-status=false 时短路）
-│   │                       #   → data/jjc-stats/*.json（dps/tps × 全时间维度，每日最多一次）
+│   │                       #   → data/jjc-stats/*.json（每日双快照：all + 2800-3100，
+│   │                       #     uid=分段+日期互不顶替；样本不足的组合记 unavailable）
 │   ├── retriever.py     # 检索（简报 014/015/016）：技能库+技改库压平成文档库
 │   │                    #   字符级 2-gram TF-IDF + 余弦 top-3；名称完整互相包含 +0.5 加权（015）
 │   │                    #   模糊档（016）：name 重叠率 ≥50% 按 0.5×重叠率 加分（阈值禁止下调）
+│   ├── agent_tools.py   # 问答层工具（简报 023）：query_skill/query_patch（retriever
+│   │                    #   按类型过滤封装）+ query_meta_rank（只读本地 jjc-stats /
+│   │                    #   arena-rank 快照，绝不出网；样本不足自动回退并注明）
+│   ├── agent.py         # 工具调用 Agent（简报 023，arch-agent-v1 方案A）：
+│   │                    #   Kimi function calling 自主选工具，工具循环上限 3 轮防爆
+│   ├── run_eval.py      # 评测跑批（简报 023）：agent-eval-v1 全 10 题 → Kimi 裁判
+│   │                    #   逐题判定 → reports/agent-eval-v1-results.md（派生物）
 │   └── ask.py           # 问答（简报 014，ask_demo 的升级）：任意问题 → 检索 top-3
 │                        #   → 拼 prompt → Kimi 回答（带数据日期）
-├── tests/               # pytest：9 个测试文件（共 124 项）
+├── tests/               # pytest：12 个测试文件（共 157 项）
 ├── data/
 │   ├── patches/         # *.txt（清洗后正文）+ *.json（结构化解析结果）
 │   ├── skill-info/      # 技能库快照 *.json（文件名=generatedAt，保留 source 字段）
 │   ├── arena-rank/      # 名剑榜快照 *.json（文件名=mode-日期，含 force_stats 与全量 rows）
-│   ├── jjc-stats/       # 心法强度榜快照 *.json（文件名=jjc-日期，rankings 键=dps|tps-时间维度）
+│   ├── jjc-stats/       # 心法强度榜快照 *.json（文件名=jjc-分段-日期，rankings 键=dps|tps-时间维度）
 │   ├── extra-info/      # 门派子文章全文 txt（文件名=文章标题）
 │   │   └── plus/        # 子文章 Markdown（表格还原+标红加粗）+ 解析后的 .json（qixue_table）
 │   └── state.json       # 增量状态：{公告url 或 generatedAt: {url, processed_at, ...}}
 ├── reports/             # 生成的 Markdown 简报（派生物）
 ├── docs/
-│   ├── task-briefs/     # 任务简报 005~022（需求与验收标准）
+│   ├── task-briefs/     # 任务简报 005~023（需求与验收标准）
 │   ├── eval/            # Agent 评测集（agent-eval-v1.json：3 技能+3 技改+2 强度榜+1 复合+1 拒答）
+│   ├── arch-agent-v1.md # Agent 架构设计（工具清单/方案A function calling/失败防御）
 │   ├── experiments/     # 摸底脚本（001.py 等）
 │   ├── assets/          # README 用的终端演示 SVG
 │   └── tech-selection.md# 数据源选型记录
 └── requirements.txt
 ```
 
-关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）；`fetch_skill_data` / `validate_skill_data` / `snapshot_uid` / `save_snapshot` / `process_snapshot`（fetch_skill_info）；`load_credentials` / `xsk_sign` / `tuilan_post` / `fetch_top200` / `validate_top200` / `flatten_rows` / `force_statistics` / `build_payload`（fetch_arena_rank）；`fetch_aggregate_status` / `fetch_filter_options` / `fetch_kungfu_rank` / `enabled_periods` / `flatten_rank_rows` / `validate_rank_rows` / `snapshot_uid`（fetch_jjc_stats）；`skill_documents` / `patch_documents` / `build_documents` / `tokenize` / `TfidfIndex` / `search` / `NAME_MATCH_BOOST` / `FUZZY_OVERLAP_MIN`（retriever）；`build_prompt` / `answer` / `ask`（ask）。
+关键可 import 接口：`fetch_records` / `load_state` / `save_state` / `filter_new_records` / `process_record`（fetch_news）；`parse_patch_text` / `parse_patch_file` / `save_patch_json`（parse_patch）；`generate_report` / `generate_report_file` / `generate_overview` / `generate_overview_file`（make_report）；`fetch_skill_data` / `validate_skill_data` / `snapshot_uid` / `save_snapshot` / `process_snapshot`（fetch_skill_info）；`load_credentials` / `xsk_sign` / `tuilan_post` / `fetch_top200` / `validate_top200` / `flatten_rows` / `force_statistics` / `build_payload`（fetch_arena_rank）；`fetch_aggregate_status` / `fetch_filter_options` / `fetch_kungfu_rank` / `enabled_periods` / `flatten_rank_rows` / `validate_rank_rows` / `resolve_score_range` / `pending_segments` / `snapshot_uid`（fetch_jjc_stats）；`ToolBox` / `TOOL_SCHEMAS` / `dispatch`（agent_tools）；`agent_answer` / `ask_agent` / `MAX_TOOL_ROUNDS`（agent）；`load_eval_set` / `parse_judge_output` / `judge_answer` / `render_report`（run_eval）；`skill_documents` / `patch_documents` / `build_documents` / `tokenize` / `TfidfIndex` / `search` / `NAME_MATCH_BOOST` / `FUZZY_OVERLAP_MIN`（retriever）；`build_prompt` / `answer` / `ask`（ask）。
 
 ## 怎么运行和验证
 
@@ -59,11 +68,13 @@ pip install -r requirements.txt
 python src/fetch_news.py       # 增量抓取 + 解析；第二次运行应输出“本次新增 0 条”
 python src/fetch_skill_info.py # 技能库快照（每天最多请求一次）；已处理应输出“本次新增 0 条”
 python src/fetch_arena_rank.py # 名剑榜快照（每日最多一次，凭证在 .env）；已处理输出“本次新增 0 条”
-python src/fetch_jjc_stats.py  # 心法强度榜快照（每日最多一次，凭证在 .env）；已处理输出“本次新增 0 条”
+python src/fetch_jjc_stats.py  # 强度榜双快照（all + 2800-3100，每日一次）；已处理输出“本次新增 0 条”
 python src/make_report.py      # 全量重建 reports/*.md
 python src/retriever.py "问题" # 检索文档库 top-3（技能 558 / 技改 1869）
 python src/ask.py "问题"       # 检索 + Kimi 问答（需 .env 的 MOONSHOT_API_KEY；无参进交互模式）
-python -m pytest tests/ -q     # 应 124 passed（各测试文件也可直接 python 运行）
+python src/agent.py "问题"     # 工具调用 Agent（function calling，3 轮上限；无参进交互模式）
+python src/run_eval.py         # 跑 agent-eval-v1 全 10 题 → reports/agent-eval-v1-results.md
+python -m pytest tests/ -q     # 应 157 passed（各测试文件也可直接 python 运行）
 ```
 
 验收基线（改动后必查）：
@@ -72,7 +83,8 @@ python -m pytest tests/ -q     # 应 124 passed（各测试文件也可直接 py
 - 9/8 JSON：文本字数 ≥ 原 txt 95%（防静默丢数据）；少林下「旗舰通用」is_shared = true
 - 首轮总览（plus json → reports/*-总览.md）：门派 21 / 奇穴 1152 / 改动 346，排行榜改动数合计 = 346
 - 名剑榜快照（data/arena-rank/3v3-*.json）：total = 1000、force_stats 合计 = 200；当日重复运行输出“本次新增 0 条”且文件与 state 逐字节不变
-- 强度榜快照（data/jjc-stats/jjc-*.json）：rankings 覆盖 dps/tps × 全部可用时间维度，每榜 rank 连续、kungfu_name 非空、胜率/出场率为 0~1 小数；当日重复运行输出“本次新增 0 条”且不发请求
+- 强度榜快照（data/jjc-stats/jjc-<分段>-<日期>.json）：每日双快照（all + 2800-3100），uid=分段+日期互不顶替；rankings 覆盖 dps/tps × 全部可用时间维度，样本不足的组合记 unavailable（官方「数据量过少」口径）；当日重复运行输出“本次新增 0 条”且不发请求
+- Agent 评测（run_eval）：reports/agent-eval-v1-results.md 逐题判定；7 道非工具题不许回归，2 强度榜 + 1 复合必须答出，拒答题必须仍拒答
 - 删 data/state.json 重跑能完整重建，且 txt/json 逐字节一致
 - 简报连续生成两次，逐字节一致（输出不含时间戳）
 
@@ -87,3 +99,5 @@ python -m pytest tests/ -q     # 应 124 passed（各测试文件也可直接 py
 - 条目续段（「调整为：…」等不以 · 开头的行）必须并入上一条目，不得拆散或丢弃
 - 模糊匹配重叠率阈值 `FUZZY_OVERLAP_MIN`（50%）**禁止下调**：低于 50% 会让「孤影化双」这类技能被「什么效果」等泛词误捞（retriever 模糊档，简报 016）
 - jx3api 会拒绝 Python requests 的 TLS 握手：fetch_records 已内置 curl 回退通道，不要拆掉；subprocess 调 curl 必须用字节捕获（Windows GBK 会毁掉 UTF-8 输出）
+- 问答层（agent_tools/agent/run_eval）**只读本地数据**（检索库与 data/ 快照），绝不实时调推栏/jx3api；每日一次的抓取纪律属于管道层，用户问多少问题都不该多打一次外部 API（简报 023）
+- Agent 工具循环上限 `MAX_TOOL_ROUNDS = 3` **禁止上调**；回答必须逐条对应工具返回，资料里没有就明说不知道，禁止编造（arch-agent-v1 失败防御规范层）

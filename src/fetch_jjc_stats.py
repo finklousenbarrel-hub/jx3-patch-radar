@@ -8,12 +8,14 @@
 host 固定 https://m.pvp.xoyo.com，不走 server-mapping，没有 /3c 前缀。
 签名与鉴权沿用简报 019 方案，复用 fetch_arena_rank 的 tuilan_post。
 
-快照口径：kungfuType（dps/tps）× 全部可用 periodType（node/last7d/last1d，
-以 filter-options 下发为准，不写死），matchMode 固定 all，分段取全区间。
-排序在客户端做，服务端只按综合强度返回；rows 保留原始强度名次。
+快照口径（简报 023 升级为每日双快照）：分段 all（filter-options 全区间）
+与 2800-3100（高分段），每个分段各自覆盖 kungfuType（dps/tps）× 全部可用
+periodType（node/last7d/last1d，以 filter-options 下发为准，不写死），
+matchMode 固定 all。排序在客户端做，服务端只按综合强度返回；rows 保留原始
+强度名次。幂等 uid = 分段 + 日期，双快照互不顶替。
 
 礼貌纪律：每日最多爬取一次——main 先查 state 再决定是否发请求，
-当日已处理则输出“本次新增 0 条”且不发任何请求。
+当日全部分段已处理则输出“本次新增 0 条”且不发任何请求。
 
 对外接口（可被其他模块 import）：
     fetch_aggregate_status(creds)      数据可用性开关
@@ -22,13 +24,16 @@ host 固定 https://m.pvp.xoyo.com，不走 server-mapping，没有 /3c 前缀�
     enabled_periods(filter_options)    可用时间维度列表（纯函数）
     flatten_rank_rows(data, ...)       压平榜单行（纯函数）
     validate_rank_rows(rows, context)  行字段校验（不符即抛 FetchError）
-    build_payload(rankings, ...)       组装落盘快照
-    snapshot_uid(today)                快照唯一标识（日频：jjc-2026-10-20）
+    resolve_score_range(...)           确定实际抓取区间（越界即抛 FetchError）
+    pending_segments(state, today)     今日未处理的分段配置（纯函数）
+    build_payload(rankings, ...)       组装落盘快照（含 segment 与实际区间）
+    snapshot_uid(segment, today)       快照唯一标识：jjc-all-2026-10-24
     save_snapshot / process_snapshot   幂等落盘（state.json 同款，已处理不改动）
     main()                             命令行入口
 
 状态文件沿用 data/state.json，以 snapshot_uid 为键：
-    {"jjc-2026-10-20": {"url": "<接口url>", "processed_at": "2026-10-20"}}
+    {"jjc-all-2026-10-24": {"url": "<接口url>", "processed_at": "2026-10-24"},
+     "jjc-2800-3100-2026-10-24": {...}}
 增量运行时，已处理快照的文件不会被改动或重写。
 """
 
@@ -52,6 +57,19 @@ KUNGFU_TYPES = ("dps", "tps")
 MATCH_MODE = "all"
 PAGE_CURSOR = 0
 PAGE_SIZE = 100
+
+# 每日双快照（简报 023）：全分段 + 高分段 2800-3100。
+# 显式区间为 None 表示取 filter-options 下发的全区间；
+# 显式区间必须落在下发范围内，否则抛 FetchError，不自行适配。
+SEGMENTS = (
+    ("all", None, None),
+    ("2800-3100", 2800, 3100),
+)
+DEFAULT_SEGMENT = SEGMENTS[0][0]
+
+# 推栏对样本不足的筛选组合返回 code=-1「数据量过少」——这是正常数据
+# （窄分段 × 短周期样本不足），快照中记为 unavailable，不算接口漂移。
+NO_DATA_HINT = "数据量过少"
 
 DEFAULT_OUT_DIR = Path(__file__).resolve().parent.parent / "data" / "jjc-stats"
 STATE_FILE = DEFAULT_OUT_DIR.parent / "state.json"
@@ -164,19 +182,49 @@ def validate_rank_rows(rows: list[dict], context: str) -> list[dict]:
 
 # ---------------------------------------------------------------- 落盘
 
-def snapshot_uid(today: _date | None = None) -> str:
-    """快照唯一标识（日频）：如 jjc-2026-10-20。"""
-    return f"jjc-{(today or _date.today()).isoformat()}"
+def snapshot_uid(segment: str = DEFAULT_SEGMENT, today: _date | None = None) -> str:
+    """快照唯一标识（日频 + 分段）：如 jjc-all-2026-10-24、jjc-2800-3100-2026-10-24。
+    双快照靠 segment 段互相区分，不会互顶。
+    """
+    return f"jjc-{segment}-{(today or _date.today()).isoformat()}"
+
+
+def resolve_score_range(segment: str, score_start: int | None,
+                        score_end: int | None,
+                        filter_options: dict) -> tuple[int, int]:
+    """确定实际抓取区间：None 取 filter-options 全区间；显式区间必须落在
+    下发范围内（含边界），否则抛 FetchError，不自行适配。
+    """
+    lo, hi = filter_options["minScore"], filter_options["maxScore"]
+    if score_start is None and score_end is None:
+        return lo, hi
+    if score_start is None or score_end is None or score_start >= score_end:
+        raise FetchError(f"分段 {segment} 显式区间非法：{score_start}~{score_end}")
+    if score_start < lo or score_end > hi:
+        raise FetchError(f"分段 {segment} 区间 {score_start}~{score_end} 超出 "
+                         f"filter-options 下发范围 {lo}~{hi}，停止执行")
+    return score_start, score_end
+
+
+def pending_segments(state: dict, today: _date | None = None) -> list[tuple]:
+    """今日尚未处理的分段配置（uid 不在 state 中的），保持 SEGMENTS 顺序。"""
+    return [cfg for cfg in SEGMENTS
+            if snapshot_uid(cfg[0], today) not in state]
 
 
 def build_payload(rankings: dict, filter_options: dict,
+                  segment: str = DEFAULT_SEGMENT,
+                  score_start: int | None = None,
+                  score_end: int | None = None,
                   today: _date | None = None) -> dict:
     """组装落盘快照：rankings 键为 {kungfu_type}-{period_type}。"""
+    start, end = resolve_score_range(segment, score_start, score_end,
+                                     filter_options)
     return {
         "snapshot_date": (today or _date.today()).isoformat(),
         "source": SOURCE_DESC,
-        "score_range": {"min": filter_options["minScore"],
-                        "max": filter_options["maxScore"]},
+        "segment": segment,
+        "score_range": {"min": start, "max": end},
         "match_mode": MATCH_MODE,
         "periods": [{"period_type": p["periodType"],
                      "period_name": p.get("periodName") or ""}
@@ -186,10 +234,12 @@ def build_payload(rankings: dict, filter_options: dict,
 
 
 def save_snapshot(payload: dict, out_dir: Path | str = DEFAULT_OUT_DIR) -> Path:
-    """快照落盘（UTF-8、中文不转义），文件名 = snapshot_uid。"""
+    """快照落盘（UTF-8、中文不转义），文件名 = snapshot_uid（含分段）。"""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / f"{snapshot_uid(_date.fromisoformat(payload['snapshot_date']))}.json"
+    uid = snapshot_uid(payload["segment"],
+                       _date.fromisoformat(payload["snapshot_date"]))
+    path = out_dir / f"{uid}.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
                     encoding="utf-8")
     return path
@@ -199,7 +249,8 @@ def process_snapshot(payload: dict,
                      out_dir: Path | str = DEFAULT_OUT_DIR,
                      state_path: Path | str = STATE_FILE) -> Path | None:
     """已处理（uid 已在 state 中）则原样跳过返回 None；新快照落盘并登记 state。"""
-    uid = snapshot_uid(_date.fromisoformat(payload["snapshot_date"]))
+    uid = snapshot_uid(payload["segment"],
+                       _date.fromisoformat(payload["snapshot_date"]))
     state = load_state(state_path)
     if uid in state:
         return None
@@ -212,10 +263,12 @@ def process_snapshot(payload: dict,
 # ---------------------------------------------------------------- 入口
 
 def main() -> int:
-    uid = snapshot_uid()
     state = load_state(STATE_FILE)
-    if uid in state:
-        print(f"快照 {uid} 已处理过，本次新增 0 条，已有文件与状态保持原样。")
+    pending = pending_segments(state)
+    if not pending:
+        uids = "、".join(snapshot_uid(cfg[0]) for cfg in SEGMENTS)
+        print(f"今日快照均已处理（{uids}），本次新增 0 条，"
+              "已有文件与状态保持原样。")
         return 0
 
     print("[1/4] 读取凭证并检查数据可用性（aggregate-status）...")
@@ -229,32 +282,55 @@ def main() -> int:
         options = fetch_filter_options(creds)
         periods = enabled_periods(options)
         combos = [(kt, p["periodType"]) for kt in KUNGFU_TYPES for p in periods]
-        print(f"[3/4] 拉取心法强度榜：分段 {options['minScore']}~{options['maxScore']}，"
-              f"matchMode={MATCH_MODE}，共 {len(combos)} 个维度组合...")
-        rankings: dict[str, dict] = {}
-        for kungfu_type, period_type in combos:
-            context = f"{kungfu_type}/{period_type}"
-            data = fetch_kungfu_rank(creds, kungfu_type, period_type,
-                                     options["minScore"], options["maxScore"])
-            rows = validate_rank_rows(flatten_rank_rows(data), context)
-            rankings[f"{kungfu_type}-{period_type}"] = {
-                "kungfu_type": kungfu_type,
-                "period_type": period_type,
-                "total": len(rows),
-                "rows": rows,
-            }
-            print(f"  - {context}：{len(rows)} 行，榜首 {rows[0]['kungfu_name']}"
-                  f"（胜率 {rows[0]['win_rate']:.2%}）")
+        saved: list[str] = []
+        for segment, score_start, score_end in pending:
+            start, end = resolve_score_range(segment, score_start, score_end,
+                                             options)
+            print(f"[3/4] 分段 {segment}（{start}~{end}）：拉取心法强度榜，"
+                  f"matchMode={MATCH_MODE}，共 {len(combos)} 个维度组合...")
+            rankings: dict[str, dict] = {}
+            for kungfu_type, period_type in combos:
+                context = f"{segment}/{kungfu_type}/{period_type}"
+                try:
+                    data = fetch_kungfu_rank(creds, kungfu_type, period_type,
+                                             start, end)
+                except FetchError as exc:
+                    # 窄分段官方口径的「数据量过少」是正常数据（样本不足），
+                    # 记为 unavailable 继续其余组合；其余错误照常抛出。
+                    if NO_DATA_HINT not in str(exc):
+                        raise
+                    rankings[f"{kungfu_type}-{period_type}"] = {
+                        "kungfu_type": kungfu_type,
+                        "period_type": period_type,
+                        "total": 0,
+                        "unavailable": NO_DATA_HINT,
+                        "rows": [],
+                    }
+                    print(f"  - {context}：{NO_DATA_HINT}，记为不可用")
+                    continue
+                rows = validate_rank_rows(flatten_rank_rows(data), context)
+                rankings[f"{kungfu_type}-{period_type}"] = {
+                    "kungfu_type": kungfu_type,
+                    "period_type": period_type,
+                    "total": len(rows),
+                    "rows": rows,
+                }
+                print(f"  - {context}：{len(rows)} 行，榜首 {rows[0]['kungfu_name']}"
+                      f"（胜率 {rows[0]['win_rate']:.2%}）")
+            if all(not r["rows"] for r in rankings.values()):
+                raise FetchError(f"分段 {segment} 全部维度组合都无数据，停止执行")
+            payload = build_payload(rankings, options, segment, start, end)
+            path = process_snapshot(payload)
+            if path is None:
+                print(f"[4/4] 快照 {snapshot_uid(segment)} 已处理过，跳过落盘。")
+            else:
+                saved.append(str(path))
+                print(f"[4/4] 新快照已落盘 -> {path}（state 已登记）")
     except FetchError as exc:
         print(f"[错误] {exc}", file=sys.stderr)
         return 1
 
-    payload = build_payload(rankings, options)
-    path = process_snapshot(payload)
-    if path is None:
-        print(f"[4/4] 快照 {uid} 已处理过，本次新增 0 条。")
-        return 0
-    print(f"[4/4] 新快照已落盘 -> {path}（state 已登记）")
+    print(f"本次新增 {len(saved)} 份快照。")
     return 0
 
 

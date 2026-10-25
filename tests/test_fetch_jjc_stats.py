@@ -24,7 +24,9 @@ from fetch_jjc_stats import (  # noqa: E402
     build_payload,
     enabled_periods,
     flatten_rank_rows,
+    pending_segments,
     process_snapshot,
+    resolve_score_range,
     save_snapshot,
     snapshot_uid,
     validate_rank_rows,
@@ -144,37 +146,75 @@ def test_validate_blank_name_raises():
 
 # ---------------------------------------------------------------- 组装与落盘
 
-def test_snapshot_uid_daily():
-    """快照 uid 为日频：jjc-<日期>。"""
-    assert snapshot_uid(_TODAY) == "jjc-2020-01-01"
+def test_snapshot_uid_daily_per_segment():
+    """快照 uid 为 分段+日频，双分段互不顶替。"""
+    assert snapshot_uid("all", _TODAY) == "jjc-all-2020-01-01"
+    assert snapshot_uid("2800-3100", _TODAY) == "jjc-2800-3100-2020-01-01"
+
+
+def test_resolve_score_range_defaults_to_full():
+    """显式区间为 None 时取 filter-options 全区间。"""
+    assert resolve_score_range("all", None, None, _fake_options()) == (1000, 3300)
+
+
+def test_resolve_score_range_explicit_ok():
+    """显式区间落在下发范围内时原样采用。"""
+    assert resolve_score_range("2800-3100", 2800, 3100,
+                               _fake_options()) == (2800, 3100)
+
+
+def test_resolve_score_range_out_of_bounds_raises():
+    """显式区间越出 filter-options 下发范围时抛 FetchError，不自行适配。"""
+    msg = _expect_fetch_error(
+        lambda: resolve_score_range("2800-3100", 2800, 4000, _fake_options()),
+        "越界")
+    assert "超出" in msg
+
+
+def test_resolve_score_range_reversed_raises():
+    """显式区间起点不小于终点时抛 FetchError。"""
+    _expect_fetch_error(
+        lambda: resolve_score_range("bad", 3100, 2800, _fake_options()), "倒挂")
+
+
+def test_pending_segments_filters_processed():
+    """pending_segments 只返回 uid 不在 state 中的分段，保持 SEGMENTS 顺序。"""
+    state = {snapshot_uid("all", _TODAY): {"url": "x"}}
+    pending = pending_segments(state, _TODAY)
+    assert [cfg[0] for cfg in pending] == ["2800-3100"]
+    full_state = {snapshot_uid(cfg[0], _TODAY): {"url": "x"}
+                  for cfg in fetch_jjc_stats.SEGMENTS}
+    assert pending_segments(full_state, _TODAY) == []
 
 
 def test_build_payload_structure():
-    """快照含分段区间、match_mode、可用时间维度与 rankings。"""
+    """快照含分段标识、实际分段区间、match_mode、可用时间维度与 rankings。"""
     rankings = {"dps-node": {"kungfu_type": "dps", "period_type": "node",
                              "total": 2,
                              "rows": flatten_rank_rows(
                                  _fake_rank_response(["幽罗引", "分山劲"]))}}
-    payload = build_payload(rankings, _fake_options(), _TODAY)
+    payload = build_payload(rankings, _fake_options(), "2800-3100", 2800, 3100,
+                            _TODAY)
     assert payload["snapshot_date"] == "2020-01-01"
-    assert payload["score_range"] == {"min": 1000, "max": 3300}
+    assert payload["segment"] == "2800-3100"
+    assert payload["score_range"] == {"min": 2800, "max": 3100}
     assert payload["match_mode"] == "all"
     assert [p["period_type"] for p in payload["periods"]] == ["node", "last7d"]
     assert payload["rankings"]["dps-node"]["rows"][0]["kungfu_name"] == "幽罗引"
 
 
 def test_save_snapshot_filename_and_encoding():
-    """落盘文件名 = uid，UTF-8 中文不转义。"""
-    payload = build_payload({}, _fake_options(), _TODAY)
+    """落盘文件名 = uid（含分段），UTF-8 中文不转义。"""
+    payload = build_payload({}, _fake_options(), "all", None, None, _TODAY)
     path = save_snapshot(payload, _tmp("out"))
-    assert path.name == "jjc-2020-01-01.json"
+    assert path.name == "jjc-all-2020-01-01.json"
     raw = path.read_bytes().decode("utf-8")
     assert "近7日" in raw and "\\u" not in raw
 
 
 def test_process_snapshot_idempotent():
     """首次落盘并登记 state；重复处理返回 None 且文件逐字节不变。"""
-    payload = build_payload({}, _fake_options(), _TODAY)
+    payload = build_payload({}, _fake_options(), "all", None, None, _TODAY)
     out_dir, state_path = _tmp("out"), _tmp("state.json")
     path = process_snapshot(payload, out_dir, state_path)
     assert path is not None and path.exists()
@@ -182,16 +222,30 @@ def test_process_snapshot_idempotent():
     assert process_snapshot(payload, out_dir, state_path) is None
     assert path.read_bytes() == before
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    assert "jjc-2020-01-01" in state
+    assert "jjc-all-2020-01-01" in state
+
+
+def test_dual_segments_same_day_no_collision():
+    """同一日期的两个分段各自落盘、各自登记，互不顶替。"""
+    out_dir, state_path = _tmp("out"), _tmp("state.json")
+    p_all = build_payload({}, _fake_options(), "all", None, None, _TODAY)
+    p_high = build_payload({}, _fake_options(), "2800-3100", 2800, 3100, _TODAY)
+    path_all = process_snapshot(p_all, out_dir, state_path)
+    path_high = process_snapshot(p_high, out_dir, state_path)
+    assert path_all is not None and path_high is not None
+    assert path_all != path_high and path_all.exists() and path_high.exists()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert "jjc-all-2020-01-01" in state and "jjc-2800-3100-2020-01-01" in state
 
 
 # ---------------------------------------------------------------- 日频守卫（main 不发请求）
 
 def test_main_daily_guard_no_request():
-    """state 已有今日 uid 时 main 直接返回 0，不发起任何抓取。"""
+    """state 已有今日全部分段 uid 时 main 直接返回 0，不发起任何抓取。"""
     state_path = _tmp("state.json")
     state_path.write_text(json.dumps(
-        {snapshot_uid(): {"url": "x", "processed_at": "2020-01-01"}},
+        {snapshot_uid("all"): {"url": "x", "processed_at": "2020-01-01"},
+         snapshot_uid("2800-3100"): {"url": "x", "processed_at": "2020-01-01"}},
         ensure_ascii=False), encoding="utf-8")
 
     calls = {"fetch": 0}
